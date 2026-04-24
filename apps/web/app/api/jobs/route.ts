@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { toErrorMessage } from "@/lib/errorMessage";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -8,17 +9,22 @@ function unauthorized() {
 export async function GET() {
   try {
     const sb = getSupabaseAdmin();
-    const { data, error } = await sb
+    let res = await sb
       .from("job_runs")
-      .select(
-        "id, status, payload, counters, created_at, started_at, finished_at",
-      )
+      .select("*")
       .order("created_at", { ascending: false })
       .limit(50);
+    if (
+      res.error &&
+      /created_at|column/i.test(String(res.error.message ?? ""))
+    ) {
+      res = await sb.from("job_runs").select("*").limit(50);
+    }
+    const { data, error } = res;
     if (error) throw error;
     return NextResponse.json({ jobs: data ?? [] });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+    const message = toErrorMessage(e);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -46,12 +52,12 @@ export async function POST(request: Request) {
         status: "queued",
         payload: { job_type: body.job_type ?? "script_crawl" },
       })
-      .select("id, status, created_at")
+      .select("id, status")
       .single();
     if (error) throw error;
     return NextResponse.json({ job: data }, { status: 201 });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
+    const message = toErrorMessage(e);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
