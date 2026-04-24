@@ -1,0 +1,9 @@
+node_modules/
+apps/web/node_modules/
+.DS_Store
+.env.worker
+apps/web/.env.local
+apps/web/.next/
+prometheus_agent/.env
+prometheus_agent/token.json
+prometheus_agent/credentials.json
