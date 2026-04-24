@@ -13,13 +13,13 @@ import subprocess
 import sys
 import time
 import traceback
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from supabase import Client, create_client
 
 
 def _utc_iso() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _client() -> Client:
@@ -86,6 +86,48 @@ def _read_row(sb: Client, job_id: str) -> dict:
     return rows[0] if rows else {}
 
 
+_SUMMARY_MARKER = "--- сводка ---"
+
+
+def _parse_child_summary_json(stdout: str, stderr: str) -> dict | None:
+    """Ищет JSON-объект после маркера сводки (script_crawl / ashby / board_feeds)."""
+    text = f"{stdout or ''}\n{stderr or ''}"
+    if _SUMMARY_MARKER not in text:
+        return None
+    tail = text.rsplit(_SUMMARY_MARKER, 1)[-1].strip()
+    start = tail.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    end = -1
+    for i in range(start, len(tail)):
+        c = tail[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if end < 0:
+        return None
+    try:
+        data = json.loads(tail[start:end])
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _trim_counter_lists(d: dict, max_list: int = 120) -> dict:
+    out = dict(d)
+    for key in ("fetch_errors_urls", "skipped_blocked_urls"):
+        v = out.get(key)
+        if isinstance(v, list) and len(v) > max_list:
+            out[key] = v[:max_list]
+            out[f"{key}_truncated_len"] = len(v)
+    return out
+
+
 def run_once(sb: Client) -> None:
     job = _pick_queued(sb)
     if not job:
@@ -128,14 +170,25 @@ def run_once(sb: Client) -> None:
         out = (proc.stdout or "") + (proc.stderr or "")
         tail = out[-8000:]
         if proc.returncode == 0:
+            counters: dict = {
+                "exit_code": 0,
+                "job_type": job_type,
+                "stdout_chars": len(out),
+            }
+            if os.environ.get("WORKER_PARSE_CHILD_COUNTERS", "1").strip().lower() not in (
+                "0",
+                "false",
+                "no",
+                "off",
+            ):
+                child = _parse_child_summary_json(proc.stdout or "", proc.stderr or "")
+                if child:
+                    merged = {**child, **counters}
+                    counters = _trim_counter_lists(merged)
             _finish_ok(
                 sb,
                 job_id,
-                counters={
-                    "exit_code": 0,
-                    "job_type": job_type,
-                    "stdout_chars": len(out),
-                },
+                counters=counters,
                 log_extra=f"\n[{_utc_iso()}] WORKER_CMD exit=0\n{tail}\n",
             )
         else:

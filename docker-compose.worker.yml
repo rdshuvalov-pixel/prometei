@@ -6,3 +6,6 @@ services:
     env_file:
       - .env.worker
     restart: unless-stopped
+    volumes:
+      # Отчёты script_crawl / ashby на диске хоста (не только внутри контейнера)
+      - ./prometheus_agent/out:/app/prometheus_agent/out

@@ -13,12 +13,14 @@
 | Что | Где / значение |
 |-----|----------------|
 | **Прод UI (Vercel)** | `https://________________.vercel.app` |
-| **API постановки в очередь** | `{Production URL}/api/jobs` — `POST`, JSON `{"job_type":"script_crawl"}` или `watchlist`; при наличии `ENQUEUE_SECRET` — заголовок `Authorization: Bearer …` |
+| **API постановки в очередь** | `{Production URL}/api/jobs` — `POST`, JSON `job_type`: `script_crawl`, `watchlist`, `tier4_ashby`, `tier4_board_feeds` (см. `worker_dispatch.py`); при наличии `ENQUEUE_SECRET` — заголовок `Authorization: Bearer …` |
 | **Supabase (проект)** | URL: `https://______.supabase.co` — регион и ref зафиксировать здесь: `________________` |
 | **Таблицы** | `public.vacancies`, `public.vacancy_sources`, `public.job_runs` — миграция [`migrations/001_job_runs.sql`](../migrations/001_job_runs.sql) при новой базе |
-| **Цели crawl** | [`search_targets.md`](search_targets.md), [`watchlist_targets.md`](watchlist_targets.md) — URL для `script_crawl.py` |
+| **Цели crawl** | [`search_targets.md`](search_targets.md), [`watchlist_targets.md`](watchlist_targets.md) — URL для `script_crawl.py`; отчёты в `out/` (`crawl_report_latest`, `ashby_report_latest`, `board_feeds_report_latest`) |
 | **VPS воркер** | Хост: `________________` — `docker compose -f docker-compose.worker.yml`; env из [`.env.worker.example`](../.env.worker.example) |
 | **Cron enqueue** | Расписание: `________________` — скрипт [`scripts/enqueue-cron.example.sh`](../scripts/enqueue-cron.example.sh), переменные `VERCEL_URL`, `ENQUEUE_SECRET` на машине с cron |
+| **План crawl / Tier4** | [`PLAN_CRAWL_STATUS.md`](PLAN_CRAWL_STATUS.md) — что сделано (зачёркнуто) и что осталось |
+| **Перед продом** | [`docs/PREPROD_CHECKLIST.md`](../docs/PREPROD_CHECKLIST.md) — чеклист до эксплуатации |
 | **Репозиторий** | `https://github.com/rdshuvalov-pixel/prometei` (или актуальный remote) |
 
 **Статус внедрения** (галочки вручную):
