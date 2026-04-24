@@ -6,7 +6,7 @@
 2. **Build & Development → Framework Preset:** **Next.js** (не «Other» / не Static).
 3. **Output Directory:** оставь **пустым** (дефолт Next на Vercel). Любой кастомный `dist`/`out`/`public` ломает выдачу.
 4. Открой **точный** Production URL из вкладки **Deployments → последний деплой → Visit** (не старый preview-URL).
-5. Если включена **Deployment Protection** (SSO), без входа в Vercel может быть не тот ответ — для проверки временно ослабь защиту или залогинься.
+5. Если включена **Deployment Protection** (SSO), **`curl`** и **cron** получат HTML «Authentication Required», а не JSON приложения. Либо ослабь защиту для **Production**, либо включи **Protection Bypass for Automation** и передавай заголовок **`x-vercel-protection-bypass`** (см. [`docs/ИНСТРУКЦИЯ_VPS_ВОРКЕР_CRON.md`](docs/ИНСТРУКЦИЯ_VPS_ВОРКЕР_CRON.md) §8.0), либо используй **`vercel curl`** под залогиненным CLI.
 
 После смены настроек — **Redeploy** без кэша (сними галку *Use existing Build Cache*).
 

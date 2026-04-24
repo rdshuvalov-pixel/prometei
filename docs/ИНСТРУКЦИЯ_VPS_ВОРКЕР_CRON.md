@@ -228,13 +228,35 @@ crontab -l
 
 Подставь **`VERCEL_URL`** — боевой `https://….vercel.app` **без слэша в конце** (иначе часто будет **308** и тело ответа не то, что ждёшь). Если в Vercel задан **`ENQUEUE_SECRET`**, подставь ту же строку в **`ENQUEUE_SECRET`** ниже.
 
+### 8.0. HTML «Authentication Required» и HTTP 401 от Vercel (не `ENQUEUE_SECRET`)
+
+Если **`curl`** возвращает длинный **HTML** со словами **Authentication Required** / **Vercel Authentication** — включена **защита деплоев** (Deployment Protection, SSO). До приложения Next запрос **не доходит**, это **не** проверка `ENQUEUE_SECRET` в коде.
+
+**Варианты:**
+
+1. **Vercel → Project → Settings → Deployment Protection** — для **Production** отключи защиту или оставь только для Preview (как удобно для личного проекта).
+2. **Protection Bypass for Automation** — в тех же настройках создай секрет обхода; в **`curl`** добавь заголовок (это **другой** секрет, не `ENQUEUE_SECRET`):
+   ```bash
+   export VERCEL_PROTECTION_BYPASS="секрет_из_vercel_bypass_automation"
+
+   curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
+     -H "x-vercel-protection-bypass: ${VERCEL_PROTECTION_BYPASS}" \
+     -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
+     -H "Content-Type: application/json" \
+     -d '{"job_type":"script_crawl"}'
+   ```
+   Документация: [Protection Bypass for Automation](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation).
+3. Установлен **Vercel CLI** и ты залогинен: `vercel curl -X POST "…/api/jobs" …` — обход часто подставляется сам.
+
+Скрипт [`scripts/enqueue-cron.example.sh`](../scripts/enqueue-cron.example.sh) поддерживает опциональный **`VERCEL_PROTECTION_BYPASS`** (тот же заголовок).
+
 ### 8.1. С Mac или с VPS: создать задачу в очереди
 
-**С секретом в Vercel:**
+**С секретом в Vercel (`ENQUEUE_SECRET`) и без защиты деплоя (или с заголовком из §8.0):**
 
 ```bash
-export VERCEL_URL="https://prometei-rus-projects-782caf72.vercel.app"
-export ENQUEUE_SECRET="8fa7483ee05e2bfd634d70243da17019db4da088831cec1e58b5e8a8f6b63835"
+export VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app"
+export ENQUEUE_SECRET="твой_enqueue_secret_из_vercel"
 
 curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
   -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
@@ -276,12 +298,16 @@ curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
 
 Ожидание: **HTTP:201** и JSON с полем **`job`** (внутри **`id`**, **`status`**: обычно **`queued`**).
 
-**Если HTTP 401 Unauthorized** — в Vercel **задан** `ENQUEUE_SECRET`, а проверка заголовка не прошла:
+**Если HTTP 401 и тело — маленький JSON** `{"error":"Unauthorized"}` — это уже **наше** API: в Vercel задан **`ENQUEUE_SECRET`**, а **`Authorization: Bearer`** не совпал или отсутствует. См. пункты ниже.
 
-1. В **Vercel → Settings → Environment Variables** открой значение **`ENQUEUE_SECRET`** и сравни **побайтно** с тем, что в `export ENQUEUE_SECRET=...` (частая ошибка — лишний пробел/перенос строки при копировании, другой превью/прод набор env).
-2. Заголовок должен быть ровно: **`Authorization: Bearer ОДИН_ПРОБЕЛ_секрет`** (без кавычек вокруг секрета в самом заголовке curl).
-3. После смены секрета в Vercel обязателен **Redeploy** — иначе Edge крутит старый билд без нового значения.
-4. Временная проверка без секрета: удали переменную **`ENQUEUE_SECRET`** в Vercel (или очисти значение), **Redeploy**, тогда `POST` **без** `Authorization` снова откроется (в проде так не оставляй).
+**Если HTTP 401 и тело — большой HTML** — сначала пройди **§8.0** (защита деплоев Vercel).
+
+Для **JSON** `Unauthorized`:
+
+1. В **Vercel → Environment Variables** сравни **`ENQUEUE_SECRET`** с `export ENQUEUE_SECRET=...`.
+2. Заголовок: **`Authorization: Bearer ОДИН_ПРОБЕЛ_секрет`**.
+3. После смены секрета — **Redeploy**.
+4. Временно без секрета: удали **`ENQUEUE_SECRET`**, **Redeploy** (в проде не оставляй).
 
 ### 8.2. Посмотреть последние задачи через API (без секрета)
 
