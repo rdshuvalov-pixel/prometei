@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { setVacancyUserStatusAction } from "./actions";
+import { markAllVacanciesSeenAction, setVacancyUserStatusAction } from "./actions";
 
 export type VacancyListItem = {
   id: string;
@@ -60,18 +60,29 @@ function VacancyCard({
   onStatusChange: () => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [statusErr, setStatusErr] = useState<string | null>(null);
   const applied = row.userStatus === "applied";
 
   function setApplied() {
+    setStatusErr(null);
     startTransition(async () => {
-      await setVacancyUserStatusAction(row.id, "applied");
+      const res = await setVacancyUserStatusAction(row.id, "applied");
+      if (!res.ok) {
+        setStatusErr(res.message);
+        return;
+      }
       onStatusChange();
     });
   }
 
   function clearApplied() {
+    setStatusErr(null);
     startTransition(async () => {
-      await setVacancyUserStatusAction(row.id, null);
+      const res = await setVacancyUserStatusAction(row.id, null);
+      if (!res.ok) {
+        setStatusErr(res.message);
+        return;
+      }
       onStatusChange();
     });
   }
@@ -142,6 +153,11 @@ function VacancyCard({
           Открыть источник →
         </a>
       )}
+      {statusErr ? (
+        <p className="mt-2 rounded-lg border-2 border-rose-600 bg-rose-100 px-2 py-1.5 text-xs font-bold text-rose-950 dark:border-rose-400 dark:bg-rose-950/60 dark:text-rose-100">
+          {statusErr}
+        </p>
+      ) : null}
       <div className="mt-3 flex flex-wrap gap-2 border-t-2 border-dashed border-neutral-900/20 pt-3 dark:border-amber-200/25">
         <CopyBtn
           label="Скопировать формальное"
@@ -180,13 +196,39 @@ function VacancyCard({
 export function VacanciesList({ items }: { items: VacancyListItem[] }) {
   const router = useRouter();
   const [hideApplied, setHideApplied] = useState(false);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [resetPending, startReset] = useTransition();
 
   const visible = hideApplied
     ? items.filter((r) => r.userStatus !== "applied")
     : items;
 
+  function onResetNew() {
+    setResetMsg(null);
+    startReset(async () => {
+      const res = await markAllVacanciesSeenAction();
+      setResetMsg(res.ok ? res.message : res.message);
+      router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={resetPending}
+          onClick={onResetNew}
+          className="rounded-full border-2 border-neutral-900 bg-white px-3 py-2 text-sm font-bold text-neutral-900 shadow-[2px_2px_0_0_#171717] hover:bg-yellow-100 disabled:opacity-50 dark:border-amber-200 dark:bg-neutral-800 dark:text-amber-50 dark:hover:bg-neutral-700"
+        >
+          {resetPending ? "…" : "Сбросить «Новое» у всех"}
+        </button>
+        {resetMsg ? (
+          <span className="text-xs font-semibold text-neutral-800 dark:text-amber-200/90">
+            {resetMsg}
+          </span>
+        ) : null}
+      </div>
       <label className="flex cursor-pointer items-center gap-2 rounded-full border-2 border-neutral-900 bg-yellow-100 px-3 py-2 text-sm font-bold text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-amber-200 dark:bg-yellow-600/20 dark:text-amber-50 dark:shadow-[2px_2px_0_0_#ca8a04]">
         <input
           type="checkbox"
