@@ -68,9 +68,13 @@ export default async function JobsPage() {
           job_runs
         </code>
         : статус <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">queued</code>{" "}
-        забирает воркер. Ниже — <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">payload</code>{" "}
-        и <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">counters</code>, если есть в
-        строке.
+        забирает воркер. При <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">failed</code>{" "}
+        смотри блок <strong>Ошибка</strong> и раскрытый <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">log</code>
+        ; на VPS:{" "}
+        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
+          docker compose -f docker-compose.worker.yml logs --tail=200 worker
+        </code>
+        .
       </p>
 
       <section className="mb-10 rounded-lg border border-zinc-200 bg-zinc-50/50 p-4 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-300">
@@ -130,15 +134,31 @@ export default async function JobsPage() {
             const payload = "payload" in j ? j.payload : undefined;
             const counters = "counters" in j ? j.counters : undefined;
             const log = "log" in j ? j.log : undefined;
+            const errRaw = "error" in j ? j.error : undefined;
+            const err =
+              errRaw != null && String(errRaw).trim() !== ""
+                ? String(errRaw)
+                : null;
+            const failed = status.toLowerCase() === "failed";
 
             return (
               <li
                 key={id}
-                className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
+                className={`rounded-lg border p-4 dark:border-zinc-800 ${
+                  failed
+                    ? "border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30"
+                    : "border-zinc-200"
+                }`}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-xs text-zinc-500">{id}</span>
-                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium dark:bg-zinc-800">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      failed
+                        ? "bg-red-200 text-red-950 dark:bg-red-900 dark:text-red-100"
+                        : "bg-zinc-100 dark:bg-zinc-800"
+                    }`}
+                  >
                     {status}
                   </span>
                   {jobType && (
@@ -159,6 +179,16 @@ export default async function JobsPage() {
                     </dd>
                   </div>
                 </dl>
+                {err && (
+                  <div className="mt-3 rounded-md border border-red-200 bg-white p-3 dark:border-red-900 dark:bg-red-950/40">
+                    <p className="text-xs font-semibold text-red-800 dark:text-red-200">
+                      Ошибка (поле error)
+                    </p>
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-red-900 dark:text-red-100">
+                      {err.length > 12000 ? `${err.slice(0, 12000)}…` : err}
+                    </pre>
+                  </div>
+                )}
                 {payload !== undefined && (
                   <details className="mt-3">
                     <summary className="cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-300">
@@ -180,13 +210,13 @@ export default async function JobsPage() {
                   </details>
                 )}
                 {log != null && String(log).trim() !== "" && (
-                  <details className="mt-2">
+                  <details className="mt-2" open={failed}>
                     <summary className="cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                      log (фрагмент)
+                      log (фрагмент){failed ? " — раскрыто при failed" : ""}
                     </summary>
-                    <pre className="mt-2 max-h-40 overflow-auto rounded bg-zinc-50 p-2 font-mono text-[11px] text-zinc-800 dark:bg-zinc-950 dark:text-zinc-200">
-                      {String(log).slice(0, 1200)}
-                      {String(log).length > 1200 ? "…" : ""}
+                    <pre className="mt-2 max-h-64 overflow-auto rounded bg-zinc-50 p-2 font-mono text-[11px] text-zinc-800 dark:bg-zinc-950 dark:text-zinc-200">
+                      {String(log).slice(0, failed ? 4000 : 1200)}
+                      {String(log).length > (failed ? 4000 : 1200) ? "…" : ""}
                     </pre>
                   </details>
                 )}

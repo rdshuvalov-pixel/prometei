@@ -268,6 +268,19 @@ crontab -l
 
 ---
 
+## 7.1. Задача в `job_runs` со статусом **failed** («упала»)
+
+1. **Веб:** страница **Прогоны** (`/jobs`) — красная карточка, блок **«Ошибка (поле error)»**, раскрытый **log** (хвост stdout/stderr воркера).
+2. **Supabase:** таблица `job_runs` → колонки **`error`**, **`log`**, **`counters`**.
+3. **VPS:** логи контейнера (часто там полный traceback до обрезки в БД):
+   ```bash
+   cd /opt/prometei
+   docker compose -f docker-compose.worker.yml logs --tail=300 worker
+   ```
+4. Частые причины: **`WORKER_CMD`** не тот или путь к скрипту неверный; **`JOB_TIMEOUT_SEC`**; **exit≠0** у Python (ошибка в `script_crawl` / tier4 / сети / ключ Supabase в `.env.worker`); для типов tier4 — не заданы **`ASHBY_SLUGS`** и т.д. в `.env.worker`.
+
+---
+
 ## 8. Проверка сквозняка (API → `job_runs` → воркер)
 
 Подставь **`VERCEL_URL`** — боевой `https://….vercel.app` **без слэша в конце** (иначе часто будет **308** и тело ответа не то, что ждёшь). Если в Vercel задан **`ENQUEUE_SECRET`**, подставь ту же строку в **`ENQUEUE_SECRET`** ниже.
@@ -299,8 +312,8 @@ curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
 **С секретом в Vercel (`ENQUEUE_SECRET`) и без защиты деплоя (или с заголовком из §8.0):**
 
 ```bash
-export VERCEL_URL="https://prometei-rus-projects-782caf72.vercel.app"
-export ENQUEUE_SECRET="8fa7483ee05e2bfd634d70243da17019db4da088831cec1e58b5e8a8f6b63835"
+export VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app"
+export ENQUEUE_SECRET="тот_же_секрет_что_в_Vercel_ENQUEUE_SECRET"
 
 curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
   -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
