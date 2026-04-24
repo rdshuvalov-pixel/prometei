@@ -226,7 +226,7 @@ crontab -l
 
 ## 8. Проверка сквозняка (API → `job_runs` → воркер)
 
-Подставь **`VERCEL_URL`** (боевой `https://….vercel.app`). Если в Vercel задан **`ENQUEUE_SECRET`**, подставь ту же строку в **`ENQUEUE_SECRET`** ниже.
+Подставь **`VERCEL_URL`** — боевой `https://….vercel.app` **без слэша в конце** (иначе часто будет **308** и тело ответа не то, что ждёшь). Если в Vercel задан **`ENQUEUE_SECRET`**, подставь ту же строку в **`ENQUEUE_SECRET`** ниже.
 
 ### 8.1. С Mac или с VPS: создать задачу в очереди
 
@@ -234,13 +234,35 @@ crontab -l
 
 ```bash
 export VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app"
-export ENQUEUE_SECRET="твой_секрет_как_в_vercel"
+export ENQUEUE_SECRET="твой_секрет_из_vercel"
 
 curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
   -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
   -H "Content-Type: application/json" \
   -d '{"job_type":"script_crawl"}'
 ```
+
+**Если видишь HTTP 308** — это редирект (частые причины: в **`VERCEL_URL`** был **`http://`**, или **слэш в конце** домена, или домен не тот). Сначала посмотри заголовок **`Location`**:
+
+```bash
+curl -sS -D - -o /dev/null -X POST "${VERCEL_URL}/api/jobs" \
+  -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
+  -H "Content-Type: application/json" \
+  -d '{"job_type":"script_crawl"}' | head -20
+```
+
+Исправь **`VERCEL_URL`** на тот адрес, который в **`Location`** (обычно тот же хост с **`https://`** и **без** завершающего **`/`** перед **`/api/jobs`**).
+
+Если нужно явно следовать редиректу одной командой (редко нужно при правильном URL):
+
+```bash
+curl -sS -L -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
+  -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
+  -H "Content-Type: application/json" \
+  -d '{"job_type":"script_crawl"}'
+```
+
+(`-L`: в современном **curl** для **308** метод **POST** к новому URL обычно сохраняется.)
 
 **Без секрета в Vercel** (переменная `ENQUEUE_SECRET` в Vercel не создана):
 
