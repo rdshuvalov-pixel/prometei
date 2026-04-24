@@ -232,21 +232,21 @@ crontab -l
 
 Если **`curl`** возвращает длинный **HTML** со словами **Authentication Required** / **Vercel Authentication** — включена **защита деплоев** (Deployment Protection, SSO). До приложения Next запрос **не доходит**, это **не** проверка `ENQUEUE_SECRET` в коде.
 
-**Варианты:**
+**Вариант A.** Vercel → Project → Settings → **Deployment Protection** — для **Production** отключи защиту или оставь только для Preview.
 
-1. **Vercel → Project → Settings → Deployment Protection** — для **Production** отключи защиту или оставь только для Preview (как удобно для личного проекта).
-2. **Protection Bypass for Automation** — в тех же настройках создай секрет обхода; в **`curl`** добавь заголовок (это **другой** секрет, не `ENQUEUE_SECRET`):
-   ```bash
-   export VERCEL_PROTECTION_BYPASS="секрет_из_vercel_bypass_automation"
+**Вариант B.** **Protection Bypass for Automation** — в тех же настройках создай секрет обхода. В **`curl`** добавь заголовок (это **другой** секрет, не `ENQUEUE_SECRET`). Документация: [Protection Bypass for Automation](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation).
 
-   curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
-     -H "x-vercel-protection-bypass: ${VERCEL_PROTECTION_BYPASS}" \
-     -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
-     -H "Content-Type: application/json" \
-     -d '{"job_type":"script_crawl"}'
-   ```
-   Документация: [Protection Bypass for Automation](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation).
-3. Установлен **Vercel CLI** и ты залогинен: `vercel curl -X POST "…/api/jobs" …` — обход часто подставляется сам.
+```bash
+export VERCEL_PROTECTION_BYPASS="секрет_из_vercel_bypass_automation"
+
+curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
+  -H "x-vercel-protection-bypass: ${VERCEL_PROTECTION_BYPASS}" \
+  -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
+  -H "Content-Type: application/json" \
+  -d '{"job_type":"script_crawl"}'
+```
+
+**Вариант C.** Установлен **Vercel CLI** и ты залогинен: `vercel curl` — обход часто подставляется сам.
 
 Скрипт [`scripts/enqueue-cron.example.sh`](../scripts/enqueue-cron.example.sh) поддерживает опциональный **`VERCEL_PROTECTION_BYPASS`** (тот же заголовок).
 
