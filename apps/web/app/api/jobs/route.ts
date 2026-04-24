@@ -6,6 +6,12 @@ function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
+function bearerToken(authHeader: string | null): string | null {
+  if (!authHeader) return null;
+  const m = authHeader.match(/^\s*Bearer\s+(.+)$/i);
+  return m?.[1]?.trim() ?? null;
+}
+
 export async function GET() {
   try {
     const sb = getSupabaseAdmin();
@@ -30,10 +36,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const secret = process.env.ENQUEUE_SECRET;
+  const secret = process.env.ENQUEUE_SECRET?.trim();
   if (secret) {
-    const auth = request.headers.get("authorization");
-    const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+    const token = bearerToken(request.headers.get("authorization"));
     if (token !== secret) return unauthorized();
   }
 
