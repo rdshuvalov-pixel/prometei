@@ -108,6 +108,13 @@ def run_once(sb: Client) -> None:
         )
         return
 
+    child_env = {
+        **os.environ,
+        "WORKER_JOB_ID": job_id,
+        "JOB_ID": job_id,
+        "JOB_TYPE": job_type,
+    }
+
     try:
         proc = subprocess.run(
             cmd,
@@ -116,6 +123,7 @@ def run_once(sb: Client) -> None:
             timeout=timeout,
             capture_output=True,
             text=True,
+            env=child_env,
         )
         out = (proc.stdout or "") + (proc.stderr or "")
         tail = out[-8000:]
@@ -123,7 +131,11 @@ def run_once(sb: Client) -> None:
             _finish_ok(
                 sb,
                 job_id,
-                counters={"exit_code": 0, "job_type": job_type},
+                counters={
+                    "exit_code": 0,
+                    "job_type": job_type,
+                    "stdout_chars": len(out),
+                },
                 log_extra=f"\n[{_utc_iso()}] WORKER_CMD exit=0\n{tail}\n",
             )
         else:

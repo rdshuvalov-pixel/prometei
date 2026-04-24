@@ -6,6 +6,7 @@ COPY requirements-worker.txt .
 RUN pip install --no-cache-dir -r requirements-worker.txt
 
 COPY worker/poll_jobs.py .
+COPY prometheus_agent/ ./prometheus_agent/
 
 ENV PYTHONUNBUFFERED=1
 
