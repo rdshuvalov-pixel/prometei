@@ -8,7 +8,9 @@ export async function enqueueJob(formData: FormData) {
   const sb = getSupabaseAdmin();
   const { error } = await sb.from("job_runs").insert({
     status: "queued",
-    payload: { job_type: jobType },
+    job_type: jobType,
+    counters: {},
+    payload: { job_type: jobType, source: "web_action" },
   });
   if (error) throw new Error(error.message);
   revalidatePath("/jobs");

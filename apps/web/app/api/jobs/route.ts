@@ -46,11 +46,14 @@ export async function POST(request: Request) {
 
   try {
     const sb = getSupabaseAdmin();
+    const jobType = body.job_type ?? "script_crawl";
     const { data, error } = await sb
       .from("job_runs")
       .insert({
         status: "queued",
-        payload: { job_type: body.job_type ?? "script_crawl" },
+        job_type: jobType,
+        counters: {},
+        payload: { job_type: jobType, source: "api" },
       })
       .select("id, status")
       .single();
