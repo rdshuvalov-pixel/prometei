@@ -58,3 +58,9 @@
 1. В Vercel добавь **`ENQUEUE_SECRET`** (Production) и **Redeploy**.
 2. На VPS в cron вызывай скрипт по образцу [`scripts/enqueue-cron.example.sh`](scripts/enqueue-cron.example.sh): экспортируй **`VERCEL_URL`** (боевой `https://….vercel.app`) и **`ENQUEUE_SECRET`**.
 3. Права: `chmod +x scripts/enqueue-cron.example.sh` (локально или на сервере).
+
+---
+
+## 5. Чеклист «что где лежит» (§12)
+
+Заполняемый список URL, хостов и галочек — в [`prometheus_agent/08_web_app_architecture.md`](prometheus_agent/08_web_app_architecture.md), раздел **12**.
