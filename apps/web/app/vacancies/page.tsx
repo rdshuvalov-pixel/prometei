@@ -4,16 +4,54 @@ import { toErrorMessage } from "@/lib/errorMessage";
 import {
   createdAtMs,
   numScore,
-  preview,
   str,
   type VacancyRow,
 } from "@/lib/vacancyDisplay";
+import { VacanciesList, type VacancyListItem } from "./VacanciesList";
 
 export const dynamic = "force-dynamic";
 
 const FETCH_CAP = 400;
 const MIN_SCORE = 50;
 const LIST_CAP = 100;
+/** Бейдж «Новое»: вакансия попала в базу не раньше этого окна от момента открытия страницы. */
+const NEW_BADGE_MS = 72 * 60 * 60 * 1000;
+
+function formatCreatedLabel(createdRaw: string): string {
+  if (createdRaw === "—") return "—";
+  const d = new Date(createdRaw);
+  return Number.isNaN(d.getTime())
+    ? createdRaw
+    : d.toLocaleString("ru-RU");
+}
+
+function toListItem(row: VacancyRow, index: number, nowMs: number): VacancyListItem {
+  const id = String(row.id ?? row.uuid ?? `row-${index}`);
+  const userStatus =
+    typeof row.user_status === "string" && row.user_status.trim() !== ""
+      ? row.user_status.trim()
+      : null;
+  const createdRaw = str(row, "created_at", "inserted_at");
+  const t = createdAtMs(row);
+  const applied = userStatus === "applied";
+  const showNewBadge = t > 0 && nowMs - t <= NEW_BADGE_MS && !applied;
+
+  return {
+    id,
+    company: str(row, "company", "employer"),
+    title: str(row, "role_title", "title", "position"),
+    score: numScore(row),
+    url: str(row, "url", "apply_url", "link"),
+    pipelineStatus: str(row, "status", "state"),
+    matchStatus: str(row, "match_status", "match"),
+    location: str(row, "location", "region", "geo", "office_location"),
+    createdLabel: formatCreatedLabel(createdRaw),
+    formal: str(row, "cover_formal", "cover_letter_formal"),
+    informal: str(row, "cover_informal", "cover_letter_informal"),
+    userStatus,
+    showNewBadge,
+  };
+}
 
 export default async function VacanciesPage() {
   let raw: VacancyRow[] = [];
@@ -38,6 +76,8 @@ export default async function VacanciesPage() {
     loadError = toErrorMessage(e);
   }
 
+  const nowMs = Date.now();
+
   const scored = raw
     .filter((r) => {
       const s = numScore(r);
@@ -48,12 +88,15 @@ export default async function VacanciesPage() {
       if (byTime !== 0) return byTime;
       return (numScore(b) ?? 0) - (numScore(a) ?? 0);
     })
-    .slice(0, LIST_CAP);
+    .slice(0, LIST_CAP)
+    .map((r, i) => toListItem(r, i, nowMs));
 
   const below = raw.filter((r) => {
     const s = numScore(r);
     return s == null || s < MIN_SCORE;
   }).length;
+
+  const enqueueSecretRequired = Boolean(process.env.ENQUEUE_SECRET?.trim());
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -77,10 +120,15 @@ export default async function VacanciesPage() {
         <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
           vacancies
         </code>
-        ; сортировка по дате в базе (новые сверху), затем по баллу при равной
-        дате; фильтр по баллу на сервере страницы (без жёсткого{" "}
-        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">.gte</code>{" "}
-        в PostgREST).
+        ; сортировка по дате (новые сверху), затем по баллу; метка «Новое» — попадание в базу за
+        последние 72 ч (и без отметки «Откликнулся»). Письма в списке не показываются — только
+        копирование. Ручной статус отклика пишется в{" "}
+        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">user_status</code> (нужна
+        миграция{" "}
+        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
+          002_vacancies_user_status.sql
+        </code>
+        ).
       </p>
       {!loadError && raw.length > 0 && (
         <p className="mb-6 text-xs text-zinc-500">
@@ -114,104 +162,10 @@ export default async function VacanciesPage() {
           Обнови скоринг в пайплайне или временно снизь порог в коде.
         </p>
       ) : (
-        <ul className="space-y-4">
-          {scored.map((row, index) => {
-            const id = String(row.id ?? row.uuid ?? `row-${index}`);
-            const company = str(row, "company", "employer");
-            const title = str(row, "role_title", "title", "position");
-            const score = numScore(row);
-            const url = str(row, "url", "apply_url", "link");
-            const status = str(row, "status", "state");
-            const location = str(
-              row,
-              "location",
-              "region",
-              "geo",
-              "office_location",
-            );
-            const created = str(row, "created_at", "inserted_at");
-            const formal = str(row, "cover_formal", "cover_letter_formal");
-            const informal = str(row, "cover_informal", "cover_letter_informal");
-
-            return (
-              <li
-                key={id}
-                className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">{company}</p>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                      {title}
-                    </p>
-                    <dl className="mt-2 grid gap-1 text-xs text-zinc-600 dark:text-zinc-400">
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                        <dt className="text-zinc-500">Статус</dt>
-                        <dd>{status}</dd>
-                      </div>
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                        <dt className="text-zinc-500">Локация</dt>
-                        <dd className="min-w-0 break-words">{location}</dd>
-                      </div>
-                      {created !== "—" && (
-                        <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                          <dt className="text-zinc-500">В базе</dt>
-                          <dd>
-                            {(() => {
-                              const d = new Date(created);
-                              return Number.isNaN(d.getTime())
-                                ? created
-                                : d.toLocaleString("ru-RU");
-                            })()}
-                          </dd>
-                        </div>
-                      )}
-                    </dl>
-                  </div>
-                  {score != null && (
-                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">
-                      {score}
-                    </span>
-                  )}
-                </div>
-                {url !== "—" && (
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 inline-block text-sm text-blue-600 hover:underline dark:text-blue-400"
-                  >
-                    Открыть источник
-                  </a>
-                )}
-                {(formal !== "—" || informal !== "—") && (
-                  <div className="mt-3 space-y-2 border-t border-zinc-100 pt-3 text-xs dark:border-zinc-800">
-                    {formal !== "—" && (
-                      <div>
-                        <p className="mb-0.5 font-medium text-zinc-700 dark:text-zinc-300">
-                          Письмо (форм.)
-                        </p>
-                        <p className="whitespace-pre-wrap text-zinc-600 dark:text-zinc-400">
-                          {preview(formal)}
-                        </p>
-                      </div>
-                    )}
-                    {informal !== "—" && (
-                      <div>
-                        <p className="mb-0.5 font-medium text-zinc-700 dark:text-zinc-300">
-                          Письмо (неформ.)
-                        </p>
-                        <p className="whitespace-pre-wrap text-zinc-600 dark:text-zinc-400">
-                          {preview(informal, 400)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <VacanciesList
+          items={scored}
+          enqueueSecretRequired={enqueueSecretRequired}
+        />
       )}
     </div>
   );
