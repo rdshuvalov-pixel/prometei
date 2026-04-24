@@ -43,6 +43,8 @@
 
 ## 3. Воркер на VPS (Contabo и т.п.)
 
+**Пошаговые команды в терминале (SSH, Docker, cron):** [`docs/ИНСТРУКЦИЯ_VPS_ВОРКЕР_CRON.md`](docs/ИНСТРУКЦИЯ_VPS_ВОРКЕР_CRON.md).
+
 1. Скопируй на сервер репозиторий (или только каталоги `worker/`, `Dockerfile.worker`, `docker-compose.worker.yml`, `requirements-worker.txt`).
 2. `cp .env.worker.example .env.worker` и заполни **`SUPABASE_URL`**, **`SUPABASE_SERVICE_ROLE_KEY`**.
 3. Когда будет готов реальный прогон, задай **`WORKER_CMD`** (одна shell-команда, см. комментарий в `.env.worker.example`). Пока **`WORKER_CMD` пуст** — скрипт забирает `queued` и помечает **`done`** со `counters.stub`, чтобы очередь не копилась.
