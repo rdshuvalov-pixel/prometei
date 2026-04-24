@@ -43,11 +43,12 @@
 
 ## 3. Воркер на VPS (Contabo и т.п.)
 
-**Пошаговые команды в терминале (SSH, Docker, cron):** [`docs/ИНСТРУКЦИЯ_VPS_ВОРКЕР_CRON.md`](docs/ИНСТРУКЦИЯ_VPS_ВОРКЕР_CRON.md).
+**Пошаговые команды в терминале (SSH, Docker, cron):** [`docs/ИНСТРУКЦИЯ_VPS_ВОРКЕР_CRON.md`](docs/ИНСТРУКЦИЯ_VPS_ВОРКЕР_CRON.md).  
+**Перед эксплуатацией:** чеклист [`docs/PREPROD_CHECKLIST.md`](docs/PREPROD_CHECKLIST.md).
 
 1. Скопируй на сервер репозиторий (или только каталоги `worker/`, `Dockerfile.worker`, `docker-compose.worker.yml`, `requirements-worker.txt`).
 2. `cp .env.worker.example .env.worker` и заполни **`SUPABASE_URL`**, **`SUPABASE_SERVICE_ROLE_KEY`**.
-3. В репо есть MVP-скрипт **`prometheus_agent/script_crawl.py`** (счётчики таблиц в Supabase + лог). В **`.env.worker`** раскомментируй **`WORKER_CMD=python3 /app/prometheus_agent/script_crawl.py`** и пересобери образ. Пока **`WORKER_CMD` пуст** — stub **`done`**.
+3. В **`.env.worker`** задай **`WORKER_CMD`**: либо **`python3 /app/prometheus_agent/script_crawl.py`** (career crawl + отчёт в `prometheus_agent/out/`), либо **`python3 /app/prometheus_agent/worker_dispatch.py`** — тогда по **`job_type`**: crawl, **`tier4_ashby`**, **`tier4_board_feeds`** (Greenhouse + Lever, см. [`board_feeds_tier4.py`](prometheus_agent/board_feeds_tier4.py)). Полный список URL: **`MAX_CRAWL_URLS=0`**. Пока **`WORKER_CMD` пуст** — stub **`done`**.
 4. Запуск: `docker compose -f docker-compose.worker.yml up -d --build` (из корня репо). Логи: `docker compose -f docker-compose.worker.yml logs -f worker`.
 
 Один проход без цикла (отладка):  

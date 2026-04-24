@@ -6,6 +6,7 @@
 
 ## 0. Что должно быть уже сделано
 
+- Перед выводом в прод пройди чеклист: **[`PREPROD_CHECKLIST.md`](PREPROD_CHECKLIST.md)** (секреты, Supabase, образ, cron, smoke-тесты).
 - Репозиторий с кодом есть на GitHub, на Vercel задеплоен **`apps/web`**, в Vercel заданы **`NEXT_PUBLIC_SUPABASE_URL`** и **`SUPABASE_SERVICE_ROLE_KEY`**.
 - В Supabase есть таблица **`public.job_runs`** (см. [`migrations/001_job_runs.sql`](../migrations/001_job_runs.sql)).
 - Для cron с секретом: в Vercel добавлен **`ENQUEUE_SECRET`** и сделан **Redeploy** (иначе `POST /api/jobs` без Bearer может ещё открываться — см. README).
@@ -103,7 +104,13 @@ nano .env.worker
 Опционально:
 
 - **`POLL_INTERVAL_SEC`** — как часто опрашивать очередь (по умолчанию 20).
-- **`WORKER_CMD`** — по умолчанию в примере закомментировано; раскомментируй **`python3 /app/prometheus_agent/script_crawl.py`** для MVP-прогона (сводка по таблицам). Пусто — stub **`done`**.
+- **`WORKER_CMD`** — пусто = stub **`done`**. Иначе одна из команд:
+  - **`python3 /app/prometheus_agent/script_crawl.py`** — обход URL из `search_targets.md` (или `watchlist_targets.md`, если в очереди **`job_type`:** `watchlist`). Отчёт: **`prometheus_agent/out/crawl_report_latest.md`** (в контейнере путь **`/app/prometheus_agent/out/`**).
+  - **`python3 /app/prometheus_agent/worker_dispatch.py`** — по **`JOB_TYPE`** из задачи: обычный crawl или **`tier4_ashby`** → [`ashby_crawler.py`](../prometheus_agent/ashby_crawler.py) (Ashby public API, фильтр PM/Lead + EU/remote + возраст вакансии).
+- **`MAX_CRAWL_URLS`** — лимит URL за прогон для `script_crawl`; **`0`** = без лимита (все ссылки из markdown).
+- **`CRAWL_DELAY_SEC`** — пауза между HTTP-запросами (сек).
+- **`CRAWL_SKIP_DOMAINS`** — через запятую; по умолчанию в коде отрезается **`weworkremotely.com`**.
+- Для Ashby (при `tier4_ashby`): **`ASHBY_SLUGS`**, **`TIER4_MAX_JOB_AGE_DAYS`**, **`ASHBY_DELAY_SEC`**, опционально **`TIER4_RELAX_GEO=1`** (см. [`.env.worker.example`](../.env.worker.example)).
 
 Сохрани файл: в `nano` — `Ctrl+O`, Enter, `Ctrl+X`.
 
@@ -153,6 +160,41 @@ git pull origin main
 docker compose -f docker-compose.worker.yml up -d --build
 ```
 
+### 5.1 Разовый прогон `script_crawl` на VPS (без очереди `job_runs`)
+
+Пакеты **`httpx`** и **`supabase`** ставятся **в Docker-образ воркера**, а не в системный Python. Запуск **`python3 prometheus_agent/script_crawl.py`** с хоста без venv даёт **`ModuleNotFoundError: No module named 'httpx'`**.
+
+**Вариант A (рекомендуется):** тот же образ, путь внутри контейнера **`/app/prometheus_agent/script_crawl.py`**:
+
+```bash
+cd /opt/prometei
+docker compose -f docker-compose.worker.yml run --rm \
+  -e MAX_CRAWL_URLS=0 -e CRAWL_DELAY_SEC=1 \
+  worker python3 /app/prometheus_agent/script_crawl.py
+```
+
+`SUPABASE_*` берутся из **`.env.worker`**. Лог — в stdout этой команды. Файлы **`out/crawl_report_*.md`** при таком запуске создаются **внутри ephemeral-контейнера** и с **`--rm`** на диск хоста не попадают; для постоянного **`out/`** на сервере добавь в **`docker-compose.worker.yml`** у сервиса **`worker`** том, например:
+
+`./prometheus_agent/out:/app/prometheus_agent/out`
+
+**Вариант B:** хостовый Python:
+
+```bash
+cd /opt/prometei
+python3 -m venv .venv-worker
+. .venv-worker/bin/activate
+pip install -r requirements-worker.txt
+set -a && source .env.worker && set +a
+export MAX_CRAWL_URLS=0 CRAWL_DELAY_SEC=1
+python3 prometheus_agent/script_crawl.py
+```
+
+Сообщение **`/data/prometheus_agent/script_crawl.py: No such file`** не из этого репозитория: проверь **`type python3`**, **`alias`**, нет ли обёртки в **`.env.worker`** / cron.
+
+### 5.2 Greenhouse + Lever (`tier4_board_feeds`)
+
+При **`WORKER_CMD=python3 /app/prometheus_agent/worker_dispatch.py`** в **`.env.worker`** задай **`GREENHOUSE_BOARD_TOKENS`**, **`LEVER_COMPANIES`**, **`WORKABLE_ACCOUNT_SLUGS`** (по необходимости) и при желании отключи агрегаторы **`REMOTIVE_TIER4=0`**, **`REMOTEOK_TIER4=0`** (по умолчанию оба включены — тянут публичные API Remotive + RemoteOK). Очередь: **`POST /api/jobs`** с **`{"job_type":"tier4_board_feeds"}`**. Отчёт: **`prometheus_agent/out/board_feeds_report_latest.md`**.
+
 ---
 
 ## 6. Cron: постановка задачи в очередь через Vercel
@@ -178,6 +220,8 @@ export ENQUEUE_SECRET="тот_же_секрет_что_в_VERCEL_ENQUEUE_SECRET"
 ```
 
 Если всё ок, в ответе будет JSON с созданной задачей; в Supabase в **`job_runs`** появится новая строка со статусом **`queued`**.
+
+После успешного **`WORKER_CMD`** воркер пишет в **`job_runs.counters`** не только `exit_code` / `stdout_chars`, но и JSON из блока **`--- сводка ---`** в конце вывода `script_crawl` / `ashby_crawler` / `board_feeds_tier4` (если не отключено: **`WORKER_PARSE_CHILD_COUNTERS=0`** в `.env.worker`).
 
 Если **`ENQUEUE_SECRET` в Vercel не задан**, Bearer не нужен — тогда для теста можно временно вызвать `curl` без заголовка (в проде лучше задать секрет).
 
