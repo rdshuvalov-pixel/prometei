@@ -99,74 +99,82 @@ export default async function VacanciesPage() {
   const enqueueSecretRequired = Boolean(process.env.ENQUEUE_SECRET?.trim());
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
-      <nav className="mb-8 flex gap-4 text-sm text-zinc-600 dark:text-zinc-400">
-        <Link className="hover:underline" href="/">
-          Главная
-        </Link>
-        <span className="font-medium text-zinc-900 dark:text-zinc-100">
-          Вакансии
-        </span>
-        <Link className="hover:underline" href="/jobs">
-          Прогоны
-        </Link>
-      </nav>
-
-      <h1 className="mb-2 text-2xl font-semibold tracking-tight">
-        Вакансии (балл ≥ {MIN_SCORE})
-      </h1>
-      <p className="mb-2 text-sm text-zinc-600 dark:text-zinc-400">
-        Загружено до {FETCH_CAP} строк из{" "}
-        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
-          vacancies
-        </code>
-        ; сортировка по дате (новые сверху), затем по баллу; метка «Новое» — попадание в базу за
-        последние 72 ч (и без отметки «Откликнулся»). Письма в списке не показываются — только
-        копирование. Ручной статус отклика пишется в{" "}
-        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">user_status</code> (нужна
-        миграция{" "}
-        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
-          002_vacancies_user_status.sql
-        </code>
-        ).
-      </p>
-      {!loadError && raw.length > 0 && (
-        <p className="mb-6 text-xs text-zinc-500">
-          В выборке: всего {raw.length}, с баллом ≥ {MIN_SCORE}:{" "}
-          <span className="font-medium text-zinc-700 dark:text-zinc-300">
-            {scored.length}
+    <div className="min-h-screen bg-gradient-to-b from-[#FFFDE7] via-[#FFF9C4] to-[#FFECB3] dark:from-neutral-950 dark:via-[#291c0e] dark:to-neutral-950">
+      <div className="mx-auto max-w-3xl px-4 py-10">
+        <nav className="mb-8 flex flex-wrap gap-4 text-sm font-medium text-neutral-800 dark:text-amber-100/90">
+          <Link
+            className="rounded-full border-2 border-neutral-900 bg-yellow-300 px-3 py-1 shadow-[2px_2px_0_0_#171717] transition hover:translate-x-px hover:translate-y-px hover:shadow-none dark:border-amber-200 dark:bg-yellow-500/20 dark:shadow-[2px_2px_0_0_#fcd34d]"
+            href="/"
+          >
+            Главная
+          </Link>
+          <span className="rounded-full border-2 border-neutral-900 bg-rose-400 px-3 py-1 text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-rose-300 dark:bg-rose-500/40 dark:text-amber-50 dark:shadow-[2px_2px_0_0_#fda4af]">
+            ⚡ Вакансии
           </span>
-          {below > 0 ? `, остальные ниже порога или без балла: ${below}` : null}
-        </p>
-      )}
+          <Link
+            className="rounded-full border-2 border-neutral-900 bg-yellow-300 px-3 py-1 shadow-[2px_2px_0_0_#171717] transition hover:translate-x-px hover:translate-y-px hover:shadow-none dark:border-amber-200 dark:bg-yellow-500/20 dark:shadow-[2px_2px_0_0_#fcd34d]"
+            href="/jobs"
+          >
+            Прогоны
+          </Link>
+        </nav>
 
-      {loadError ? (
-        <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          {loadError}
-        </p>
-      ) : raw.length === 0 ? (
-        <p className="text-sm text-zinc-500">
-          Таблица пуста или нет доступа. Проверь{" "}
-          <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
-            NEXT_PUBLIC_SUPABASE_URL
+        <h1 className="mb-2 text-2xl font-black tracking-tight text-neutral-900 dark:text-amber-50">
+          Вакансии (балл ≥ {MIN_SCORE})
+        </h1>
+        <p className="mb-2 text-sm font-medium text-neutral-800/90 dark:text-amber-100/80">
+          Загружено до {FETCH_CAP} строк из{" "}
+          <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
+            vacancies
+          </code>
+          ; сортировка по дате (новые сверху), затем по баллу; метка «Новое» — попадание в базу за
+          последние 72 ч (и без отметки «Откликнулся»). Письма в списке не показываются — только
+          копирование. Ручной статус отклика пишется в{" "}
+          <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
+            user_status
           </code>{" "}
-          и{" "}
-          <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
-            SUPABASE_SERVICE_ROLE_KEY
-          </code>{" "}
-          на Vercel.
+          (нужна миграция{" "}
+          <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
+            002_vacancies_user_status.sql
+          </code>
+          ).
         </p>
-      ) : scored.length === 0 ? (
-        <p className="text-sm text-zinc-500">
-          В последних {raw.length} строках нет вакансий с баллом ≥ {MIN_SCORE}.
-          Обнови скоринг в пайплайне или временно снизь порог в коде.
-        </p>
-      ) : (
-        <VacanciesList
-          items={scored}
-          enqueueSecretRequired={enqueueSecretRequired}
-        />
-      )}
+        {!loadError && raw.length > 0 && (
+          <p className="mb-6 text-xs font-semibold text-neutral-700 dark:text-amber-200/70">
+            В выборке: всего {raw.length}, с баллом ≥ {MIN_SCORE}:{" "}
+            <span className="text-neutral-900 dark:text-amber-50">{scored.length}</span>
+            {below > 0 ? `, остальные ниже порога или без балла: ${below}` : null}
+          </p>
+        )}
+
+        {loadError ? (
+          <p className="rounded-2xl border-4 border-neutral-900 bg-rose-100 p-4 text-sm font-medium text-neutral-900 shadow-[4px_4px_0_0_#171717] dark:border-rose-300 dark:bg-rose-950/50 dark:text-rose-100 dark:shadow-[4px_4px_0_0_#881337]">
+            {loadError}
+          </p>
+        ) : raw.length === 0 ? (
+          <p className="text-sm font-medium text-neutral-700 dark:text-amber-200/80">
+            Таблица пуста или нет доступа. Проверь{" "}
+            <code className="rounded border border-neutral-800 bg-yellow-200/70 px-1 font-mono dark:bg-yellow-500/15">
+              NEXT_PUBLIC_SUPABASE_URL
+            </code>{" "}
+            и{" "}
+            <code className="rounded border border-neutral-800 bg-yellow-200/70 px-1 font-mono dark:bg-yellow-500/15">
+              SUPABASE_SERVICE_ROLE_KEY
+            </code>{" "}
+            на Vercel.
+          </p>
+        ) : scored.length === 0 ? (
+          <p className="text-sm font-medium text-neutral-700 dark:text-amber-200/80">
+            В последних {raw.length} строках нет вакансий с баллом ≥ {MIN_SCORE}.
+            Обнови скоринг в пайплайне или временно снизь порог в коде.
+          </p>
+        ) : (
+          <VacanciesList
+            items={scored}
+            enqueueSecretRequired={enqueueSecretRequired}
+          />
+        )}
+      </div>
     </div>
   );
 }
