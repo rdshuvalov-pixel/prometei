@@ -1,13 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  enqueueJobFromUi,
-  setVacancyUserStatusAction,
-  type EnqueueState,
-} from "./actions";
+import { setVacancyUserStatusAction } from "./actions";
 
 export type VacancyListItem = {
   id: string;
@@ -23,11 +18,6 @@ export type VacancyListItem = {
   informal: string;
   userStatus: string | null;
   showNewBadge: boolean;
-};
-
-const initialEnqueue: EnqueueState = {
-  ok: false,
-  message: "",
 };
 
 function CopyBtn({
@@ -187,18 +177,8 @@ function VacancyCard({
   );
 }
 
-export function VacanciesList({
-  items,
-  enqueueSecretRequired,
-}: {
-  items: VacancyListItem[];
-  enqueueSecretRequired: boolean;
-}) {
+export function VacanciesList({ items }: { items: VacancyListItem[] }) {
   const router = useRouter();
-  const [state, formAction, isEnqueuePending] = useActionState(
-    enqueueJobFromUi,
-    initialEnqueue,
-  );
   const [hideApplied, setHideApplied] = useState(false);
 
   const visible = hideApplied
@@ -207,74 +187,6 @@ export function VacanciesList({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border-4 border-neutral-900 bg-gradient-to-br from-yellow-200 via-amber-200 to-yellow-300 p-5 text-sm font-medium text-neutral-900 shadow-[6px_6px_0_0_#171717] dark:from-yellow-600/20 dark:via-amber-700/25 dark:to-yellow-800/20 dark:text-amber-50 dark:shadow-[6px_6px_0_0_#fbbf24]">
-        <h2 className="text-base font-black tracking-tight">
-          ⚡ Постановка в очередь (воркер на VPS)
-        </h2>
-        <p className="mt-2 text-xs font-semibold text-neutral-800/95 dark:text-amber-100/85">
-          Тип{" "}
-          <code className="rounded-md border border-neutral-900 bg-white/80 px-1.5 py-0.5 font-mono dark:border-amber-200 dark:bg-neutral-900/60">
-            score_vacancies
-          </code>{" "}
-          сейчас запускает заглушку-счётчик; полный скоринг подключается отдельно. Остальные типы —
-          как в cron.
-        </p>
-        <form
-          action={formAction}
-          className="mt-4 flex flex-col gap-3 rounded-xl border-2 border-neutral-900 bg-yellow-50/80 p-3 sm:flex-row sm:flex-wrap sm:items-end dark:border-amber-200/40 dark:bg-neutral-950/40"
-        >
-          <label className="flex min-w-[12rem] flex-col gap-1 text-xs font-bold text-neutral-800 dark:text-amber-100">
-            <span>Тип задачи</span>
-            <select
-              name="job_type"
-              className="rounded-lg border-2 border-neutral-900 bg-white px-2 py-2 text-sm font-bold text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-amber-200 dark:bg-neutral-900 dark:text-amber-50 dark:shadow-[2px_2px_0_0_#ca8a04]"
-              defaultValue="score_vacancies"
-            >
-              <option value="score_vacancies">score_vacancies (оценка / заглушка)</option>
-              <option value="script_crawl">script_crawl</option>
-              <option value="tier4_ashby">tier4_ashby</option>
-              <option value="tier4_board_feeds">tier4_board_feeds</option>
-            </select>
-          </label>
-          {enqueueSecretRequired ? (
-            <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs font-bold text-neutral-800 dark:text-amber-100">
-              <span>Секрет (ENQUEUE_SECRET)</span>
-              <input
-                type="password"
-                name="enqueue_secret"
-                autoComplete="off"
-                className="rounded-lg border-2 border-neutral-900 bg-white px-2 py-2 text-sm font-semibold text-neutral-900 shadow-[2px_2px_0_0_#171717] placeholder:text-neutral-400 dark:border-amber-200 dark:bg-neutral-900 dark:text-amber-50 dark:placeholder:text-amber-200/40 dark:shadow-[2px_2px_0_0_#ca8a04]"
-                placeholder="Как в Vercel"
-              />
-            </label>
-          ) : (
-            <input type="hidden" name="enqueue_secret" value="" />
-          )}
-          <button
-            type="submit"
-            disabled={isEnqueuePending}
-            className="rounded-xl border-2 border-neutral-900 bg-neutral-900 px-5 py-2.5 text-sm font-black text-yellow-300 shadow-[3px_3px_0_0_#facc15] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#facc15] disabled:opacity-50 dark:bg-yellow-400 dark:text-neutral-900 dark:shadow-[3px_3px_0_0_#171717] dark:hover:shadow-[2px_2px_0_0_#171717]"
-          >
-            {isEnqueuePending ? "⚡ Отправка…" : "⚡ В очередь!"}
-          </button>
-        </form>
-        {state.message ? (
-          <p
-            className={`mt-3 text-xs font-bold ${state.ok ? "text-emerald-800 dark:text-emerald-300" : "text-rose-800 dark:text-rose-300"}`}
-          >
-            {state.message}
-          </p>
-        ) : null}
-        <p className="mt-2 text-xs font-bold">
-          <Link
-            href="/jobs"
-            className="text-neutral-900 underline decoration-2 decoration-rose-500 underline-offset-2 hover:text-rose-700 dark:text-amber-200 dark:decoration-amber-300 dark:hover:text-white"
-          >
-            → Открыть «Прогоны»
-          </Link>
-        </p>
-      </section>
-
       <label className="flex cursor-pointer items-center gap-2 rounded-full border-2 border-neutral-900 bg-yellow-100 px-3 py-2 text-sm font-bold text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-amber-200 dark:bg-yellow-600/20 dark:text-amber-50 dark:shadow-[2px_2px_0_0_#ca8a04]">
         <input
           type="checkbox"

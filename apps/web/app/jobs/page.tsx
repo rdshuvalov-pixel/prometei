@@ -79,14 +79,9 @@ export default async function JobsPage() {
 
       <section className="mb-10 rounded-lg border border-zinc-200 bg-zinc-50/50 p-4 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-300">
         <p className="font-medium text-zinc-900 dark:text-zinc-100">
-          Постановка в очередь: API или страница «Вакансии»
+          Постановка в очередь только через API
         </p>
         <p className="mt-2">
-          Форма на{" "}
-          <Link className="text-blue-600 hover:underline dark:text-blue-400" href="/vacancies">
-            /vacancies
-          </Link>{" "}
-          (секрет тот же, что для cron). Либо{" "}
           <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">POST /api/jobs</code> с телом{" "}
           <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
             {`{"job_type":"script_crawl"}`}
