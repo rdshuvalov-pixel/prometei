@@ -36,3 +36,23 @@
 **Production URL:** `https://________________.vercel.app`
 
 После правок env — **Redeploy** production.
+
+---
+
+## 3. Воркер на VPS (Contabo и т.п.)
+
+1. Скопируй на сервер репозиторий (или только каталоги `worker/`, `Dockerfile.worker`, `docker-compose.worker.yml`, `requirements-worker.txt`).
+2. `cp .env.worker.example .env.worker` и заполни **`SUPABASE_URL`**, **`SUPABASE_SERVICE_ROLE_KEY`**.
+3. Когда будет готов реальный прогон, задай **`WORKER_CMD`** (одна shell-команда, см. комментарий в `.env.worker.example`). Пока **`WORKER_CMD` пуст** — скрипт забирает `queued` и помечает **`done`** со `counters.stub`, чтобы очередь не копилась.
+4. Запуск: `docker compose -f docker-compose.worker.yml up -d --build` (из корня репо). Логи: `docker compose -f docker-compose.worker.yml logs -f worker`.
+
+Один проход без цикла (отладка):  
+`docker compose -f docker-compose.worker.yml run --rm worker python poll_jobs.py --once`
+
+---
+
+## 4. Cron → постановка в очередь через Vercel
+
+1. В Vercel добавь **`ENQUEUE_SECRET`** (Production) и **Redeploy**.
+2. На VPS в cron вызывай скрипт по образцу [`scripts/enqueue-cron.example.sh`](scripts/enqueue-cron.example.sh): экспортируй **`VERCEL_URL`** (боевой `https://….vercel.app`) и **`ENQUEUE_SECRET`**.
+3. Права: `chmod +x scripts/enqueue-cron.example.sh` (локально или на сервере).

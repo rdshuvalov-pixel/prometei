@@ -1,0 +1,12 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements-worker.txt .
+RUN pip install --no-cache-dir -r requirements-worker.txt
+
+COPY worker/poll_jobs.py .
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "-u", "poll_jobs.py"]
