@@ -49,8 +49,8 @@ export default async function Home() {
         Прометей
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-        Веб-оболочка над Supabase: список вакансий, очередь прогонов для воркера и
-        API постановки задач.
+        Веб-оболочка над Supabase: список вакансий, мониторинг прогонов; постановка в
+        очередь — только <code className="rounded bg-zinc-100 px-1 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">POST /api/jobs</code>.
       </p>
 
       {statsError ? (
@@ -96,7 +96,7 @@ export default async function Home() {
             href="/jobs"
             className="font-medium text-blue-600 hover:underline dark:text-blue-400"
           >
-            Прогоны: история, payload, «В очередь»
+            Прогоны: история, payload, логи
           </Link>
         </li>
         <li>
