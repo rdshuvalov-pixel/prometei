@@ -96,8 +96,6 @@ export default async function VacanciesPage() {
     return s == null || s < MIN_SCORE;
   }).length;
 
-  const enqueueSecretRequired = Boolean(process.env.ENQUEUE_SECRET?.trim());
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#FFFDE7] via-[#FFF9C4] to-[#FFECB3] dark:from-neutral-950 dark:via-[#291c0e] dark:to-neutral-950">
       <div className="mx-auto max-w-3xl px-4 py-10">
@@ -169,10 +167,7 @@ export default async function VacanciesPage() {
             Обнови скоринг в пайплайне или временно снизь порог в коде.
           </p>
         ) : (
-          <VacanciesList
-            items={scored}
-            enqueueSecretRequired={enqueueSecretRequired}
-          />
+          <VacanciesList items={scored} />
         )}
       </div>
     </div>

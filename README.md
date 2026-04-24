@@ -29,9 +29,9 @@
 |------------|------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | URL проекта Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role (только сервер) |
-| `ENQUEUE_SECRET` | **рекомендуется** в проде: без него `POST /api/jobs` доступен всем; с секретом нужен `Authorization: Bearer …` (на странице **Вакансии** тот же секрет вводится в форму постановки в очередь). |
+| `ENQUEUE_SECRET` | **рекомендуется** в проде: без него `POST /api/jobs` доступен всем; с секретом нужен `Authorization: Bearer …` |
 
-Постановка в очередь: **POST /api/jobs** (cron, curl) или форма на **`/vacancies`**.
+Постановка в очередь: **POST /api/jobs** (cron, curl, скрипт).
 
 Запиши сюда боевой адрес (из **Deployments → Production → Visit**), чтобы не искать потом:
 
