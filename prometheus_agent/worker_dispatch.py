@@ -6,6 +6,7 @@
 - watchlist → script_crawl.py (читает watchlist_targets.md)
 - tier4_ashby, ashby_tier4 → ashby_crawler.py
 - tier4_board_feeds, tier4_greenhouse_lever, board_feeds → board_feeds_tier4.py
+- score_vacancies, vacancy_score, evaluate, scoring → script_score_stub.py (заглушка счётчика)
 """
 
 from __future__ import annotations
@@ -24,6 +25,13 @@ def main() -> int:
         script = base / "ashby_crawler.py"
     elif job_type in ("tier4_board_feeds", "tier4_greenhouse_lever", "board_feeds"):
         script = base / "board_feeds_tier4.py"
+    elif job_type in (
+        "score_vacancies",
+        "vacancy_score",
+        "evaluate",
+        "scoring",
+    ):
+        script = base / "script_score_stub.py"
     else:
         script = base / "script_crawl.py"
     if not script.is_file():
