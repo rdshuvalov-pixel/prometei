@@ -173,7 +173,7 @@ chmod +x scripts/enqueue-cron.example.sh
 ```bash
 cd /opt/prometei
 export VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app"
-export ENQUEUE_SECRET="тот_же_секрет_что_в_Vercel"
+export ENQUEUE_SECRET="тот_же_секрет_что_в_VERCEL_ENQUEUE_SECRET"
 ./scripts/enqueue-cron.example.sh
 ```
 
@@ -192,8 +192,10 @@ crontab -e
 Пример: **каждый день в 06:30** по времени сервера (часовой пояс VPS смотри командой `timedatectl` или `date`):
 
 ```cron
-30 6 * * * cd /opt/prometei && VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app" ENQUEUE_SECRET="ТВОЙ_СЕКРЕТ" ./scripts/enqueue-cron.example.sh >> /var/log/prometei-enqueue.log 2>&1
+30 6 * * * cd /opt/prometei && VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app" ENQUEUE_SECRET="СЛУЧАЙНАЯ_СТРОКА_КАК_В_VERCEL" ./scripts/enqueue-cron.example.sh >> /var/log/prometei-enqueue.log 2>&1
 ```
+
+**Важно:** в `ENQUEUE_SECRET` должен быть **тот же произвольный секрет**, что ты задал в Vercel (например вывод `openssl rand -hex 32`), **не** ключ Supabase и не JWT сервисной роли.
 
 Создать лог-файл и права (если пишешь в `/var/log`):
 
@@ -219,3 +221,97 @@ crontab -l
 3. Vercel: **`ENQUEUE_SECRET`** задан, если хочешь закрыть анонимный `POST`.
 
 Заполненные URL и хост — в [`prometheus_agent/08_web_app_architecture.md`](../prometheus_agent/08_web_app_architecture.md), §12.
+
+---
+
+## 8. Проверка сквозняка (API → `job_runs` → воркер)
+
+Подставь **`VERCEL_URL`** (боевой `https://….vercel.app`). Если в Vercel задан **`ENQUEUE_SECRET`**, подставь ту же строку в **`ENQUEUE_SECRET`** ниже.
+
+### 8.1. С Mac или с VPS: создать задачу в очереди
+
+**С секретом в Vercel:**
+
+```bash
+export VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app"
+export ENQUEUE_SECRET="твой_секрет_как_в_vercel"
+
+curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
+  -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
+  -H "Content-Type: application/json" \
+  -d '{"job_type":"script_crawl"}'
+```
+
+**Без секрета в Vercel** (переменная `ENQUEUE_SECRET` в Vercel не создана):
+
+```bash
+export VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app"
+
+curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
+  -H "Content-Type: application/json" \
+  -d '{"job_type":"script_crawl"}'
+```
+
+Ожидание: **HTTP:201** и JSON с полем **`job`** (внутри **`id`**, **`status`**: обычно **`queued`**). Если **401** — Bearer не совпадает с Vercel или секрет не задан там, а ты его передал.
+
+### 8.2. Посмотреть последние задачи через API (без секрета)
+
+```bash
+curl -sS "${VERCEL_URL}/api/jobs" | head -c 4000
+```
+
+При установленном **`jq`**:
+
+```bash
+curl -sS "${VERCEL_URL}/api/jobs" | jq '.jobs[:5]'
+```
+
+### 8.3. На VPS: форсировать один цикл воркера
+
+Из каталога репо (где `docker-compose.worker.yml`):
+
+```bash
+cd /opt/prometei
+docker compose -f docker-compose.worker.yml run --rm worker python poll_jobs.py --once
+```
+
+Сразу после этого снова:
+
+```bash
+curl -sS "${VERCEL_URL}/api/jobs" | jq '.jobs[:3]'
+```
+
+Ожидание: свежая строка прошла **`queued` → `running` → `done`** (или **`failed`**, если **`WORKER_CMD`** падает). Если **`WORKER_CMD` пуст** — будет **`done`** со **`stub`** в **`counters`**.
+
+### 8.4. Логи воркера (постоянный процесс)
+
+```bash
+cd /opt/prometei
+docker compose -f docker-compose.worker.yml logs --tail 80 worker
+```
+
+Поток в реальном времени (выход `Ctrl+C`):
+
+```bash
+docker compose -f docker-compose.worker.yml logs -f worker
+```
+
+### 8.5. Supabase (Table Editor или SQL Editor)
+
+В **SQL Editor**:
+
+```sql
+select id, status, job_type, created_at, started_at, finished_at
+from public.job_runs
+order by created_at desc
+limit 10;
+```
+
+Сверь **`status`** и время с шагами выше.
+
+### 8.6. Что дальше после успешной проверки
+
+1. Убедиться, что в **crontab** в `ENQUEUE_SECRET` **не** лежит ключ Supabase — только **тот же** секрет, что в Vercel (если JWT попал в репозиторий или в лог — **сротировать**: новый service role в Supabase при утечке, новый `ENQUEUE_SECRET` в Vercel, обновить cron).
+2. Задать реальный **`WORKER_CMD`** в **`.env.worker`**, пересобрать:  
+   `docker compose -f docker-compose.worker.yml up -d --build`
+3. Заполнить §12 в [`prometheus_agent/08_web_app_architecture.md`](../prometheus_agent/08_web_app_architecture.md) реальными URL (без секретов).
