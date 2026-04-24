@@ -120,6 +120,10 @@ export default async function JobsPage() {
         <ul className="space-y-4">
           {jobs.map((j, index) => {
             const id = String(j.id ?? `job-${index}`);
+            const jobType =
+              j.job_type != null && String(j.job_type).trim() !== ""
+                ? String(j.job_type)
+                : null;
             const status = j.status != null ? String(j.status) : "—";
             const created = formatTs(j.created_at);
             const started = formatTs(j.started_at);
@@ -138,6 +142,11 @@ export default async function JobsPage() {
                   <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium dark:bg-zinc-800">
                     {status}
                   </span>
+                  {jobType && (
+                    <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-900 dark:bg-sky-900 dark:text-sky-100">
+                      {jobType}
+                    </span>
+                  )}
                 </div>
                 <dl className="mt-2 grid gap-1 text-xs text-zinc-600 dark:text-zinc-400">
                   <div className="flex flex-wrap gap-x-2">
