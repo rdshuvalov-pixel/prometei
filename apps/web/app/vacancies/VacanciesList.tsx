@@ -55,9 +55,9 @@ function CopyBtn({
       type="button"
       disabled={disabled}
       onClick={onCopy}
-      className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+      className="rounded-lg border-2 border-neutral-900 bg-yellow-200 px-2.5 py-1.5 text-xs font-bold text-neutral-900 shadow-[2px_2px_0_0_#171717] transition hover:bg-yellow-300 hover:shadow-[1px_1px_0_0_#171717] disabled:translate-y-px disabled:opacity-40 disabled:shadow-none dark:border-amber-200 dark:bg-yellow-500/25 dark:text-amber-50 dark:shadow-[2px_2px_0_0_#fcd34d] dark:hover:bg-yellow-500/35"
     >
-      {done ? "Скопировано" : label}
+      {done ? "⚡ Скопировано!" : label}
     </button>
   );
 }
@@ -91,51 +91,53 @@ function VacancyCard({
 
   return (
     <li
-      className={`rounded-lg border p-4 transition-colors dark:border-zinc-800 ${
+      className={`rounded-2xl border-4 border-neutral-900 p-4 shadow-[4px_4px_0_0_#171717] transition-colors dark:shadow-[4px_4px_0_0_#fbbf24] ${
         applied
-          ? "border-zinc-300 bg-zinc-50/80 opacity-90 dark:border-zinc-700 dark:bg-zinc-900/40"
-          : "border-zinc-200 dark:border-zinc-800"
-      } ${row.showNewBadge && !applied ? "ring-1 ring-amber-400/60 dark:ring-amber-500/40" : ""}`}
+          ? "bg-neutral-200/90 dark:bg-neutral-800/80"
+          : "bg-white/95 dark:bg-neutral-900/90"
+      } ${row.showNewBadge && !applied ? "ring-4 ring-rose-400 ring-offset-2 ring-offset-[#FFECB3] dark:ring-rose-500 dark:ring-offset-neutral-950" : ""}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium">{row.company}</p>
+            <p className="font-black text-neutral-900 dark:text-amber-50">{row.company}</p>
             {row.showNewBadge && !applied && (
-              <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                Новое
+              <span className="shrink-0 rounded-full border-2 border-neutral-900 bg-rose-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-rose-200 dark:bg-rose-500 dark:text-white dark:shadow-[2px_2px_0_0_#881337]">
+                ⚡ Новое
               </span>
             )}
             {applied && (
-              <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-900 dark:bg-blue-950 dark:text-blue-200">
-                Отклик отправлен
+              <span className="shrink-0 rounded-full border-2 border-neutral-900 bg-yellow-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-amber-200 dark:bg-amber-600/50 dark:text-amber-50">
+                Пика-пика ✓
               </span>
             )}
           </div>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">{row.title}</p>
-          <dl className="mt-2 grid gap-1 text-xs text-zinc-600 dark:text-zinc-400">
+          <p className="text-sm font-semibold text-neutral-800 dark:text-amber-100/85">
+            {row.title}
+          </p>
+          <dl className="mt-2 grid gap-1 text-xs font-medium text-neutral-800 dark:text-amber-100/75">
             <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-              <dt className="text-zinc-500">Статус вакансии</dt>
+              <dt className="text-neutral-600 dark:text-amber-200/60">Статус вакансии</dt>
               <dd>{row.pipelineStatus}</dd>
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-              <dt className="text-zinc-500">Скоринг</dt>
+              <dt className="text-neutral-600 dark:text-amber-200/60">Скоринг</dt>
               <dd>{row.matchStatus}</dd>
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-              <dt className="text-zinc-500">Локация</dt>
+              <dt className="text-neutral-600 dark:text-amber-200/60">Локация</dt>
               <dd className="min-w-0 break-words">{row.location}</dd>
             </div>
             {row.createdLabel !== "—" && (
               <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                <dt className="text-zinc-500">В базе</dt>
+                <dt className="text-neutral-600 dark:text-amber-200/60">В базе</dt>
                 <dd>{row.createdLabel}</dd>
               </div>
             )}
           </dl>
         </div>
         {row.score != null && (
-          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">
+          <span className="shrink-0 rounded-full border-2 border-neutral-900 bg-yellow-300 px-2.5 py-0.5 text-xs font-black text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-amber-200 dark:bg-yellow-500/40 dark:text-amber-50 dark:shadow-[2px_2px_0_0_#ca8a04]">
             {row.score}
           </span>
         )}
@@ -145,12 +147,12 @@ function VacancyCard({
           href={row.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-2 inline-block text-sm text-blue-600 hover:underline dark:text-blue-400"
+          className="mt-2 inline-block text-sm font-bold text-neutral-900 underline decoration-2 decoration-rose-400 underline-offset-2 hover:text-rose-700 dark:text-amber-200 dark:decoration-amber-400 dark:hover:text-amber-50"
         >
-          Открыть источник
+          Открыть источник →
         </a>
       )}
-      <div className="mt-3 flex flex-wrap gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+      <div className="mt-3 flex flex-wrap gap-2 border-t-2 border-dashed border-neutral-900/20 pt-3 dark:border-amber-200/25">
         <CopyBtn
           label="Скопировать формальное"
           text={formalOk ? row.formal : ""}
@@ -166,18 +168,18 @@ function VacancyCard({
             type="button"
             disabled={pending}
             onClick={setApplied}
-            className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg border-2 border-neutral-900 bg-rose-400 px-2.5 py-1.5 text-xs font-black text-neutral-900 shadow-[2px_2px_0_0_#171717] transition hover:translate-x-px hover:translate-y-px hover:shadow-none disabled:opacity-50 dark:border-rose-200 dark:bg-rose-500 dark:text-white"
           >
-            Откликнулся
+            Откликнулся!
           </button>
         ) : (
           <button
             type="button"
             disabled={pending}
             onClick={clearApplied}
-            className="rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            className="rounded-lg border-2 border-neutral-900 bg-white px-2.5 py-1.5 text-xs font-bold text-neutral-900 shadow-[2px_2px_0_0_#171717] hover:bg-yellow-100 dark:border-amber-200 dark:bg-neutral-800 dark:text-amber-100 dark:hover:bg-neutral-700"
           >
-            Снять метку отклика
+            Снять метку
           </button>
         )}
       </div>
@@ -205,22 +207,27 @@ export function VacanciesList({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-zinc-200 bg-zinc-50/50 p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900/30">
-        <h2 className="font-medium text-zinc-900 dark:text-zinc-100">
-          Постановка в очередь (воркер на VPS)
+      <section className="rounded-2xl border-4 border-neutral-900 bg-gradient-to-br from-yellow-200 via-amber-200 to-yellow-300 p-5 text-sm font-medium text-neutral-900 shadow-[6px_6px_0_0_#171717] dark:from-yellow-600/20 dark:via-amber-700/25 dark:to-yellow-800/20 dark:text-amber-50 dark:shadow-[6px_6px_0_0_#fbbf24]">
+        <h2 className="text-base font-black tracking-tight">
+          ⚡ Постановка в очередь (воркер на VPS)
         </h2>
-        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 text-xs font-semibold text-neutral-800/95 dark:text-amber-100/85">
           Тип{" "}
-          <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">score_vacancies</code>{" "}
-          сейчас запускает заглушку-счётчик; полный скоринг подключается отдельно. Остальные
-          типы — как в cron.
+          <code className="rounded-md border border-neutral-900 bg-white/80 px-1.5 py-0.5 font-mono dark:border-amber-200 dark:bg-neutral-900/60">
+            score_vacancies
+          </code>{" "}
+          сейчас запускает заглушку-счётчик; полный скоринг подключается отдельно. Остальные типы —
+          как в cron.
         </p>
-        <form action={formAction} className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-          <label className="flex min-w-[12rem] flex-col gap-1 text-xs">
-            <span className="text-zinc-500">Тип задачи</span>
+        <form
+          action={formAction}
+          className="mt-4 flex flex-col gap-3 rounded-xl border-2 border-neutral-900 bg-yellow-50/80 p-3 sm:flex-row sm:flex-wrap sm:items-end dark:border-amber-200/40 dark:bg-neutral-950/40"
+        >
+          <label className="flex min-w-[12rem] flex-col gap-1 text-xs font-bold text-neutral-800 dark:text-amber-100">
+            <span>Тип задачи</span>
             <select
               name="job_type"
-              className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950"
+              className="rounded-lg border-2 border-neutral-900 bg-white px-2 py-2 text-sm font-bold text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-amber-200 dark:bg-neutral-900 dark:text-amber-50 dark:shadow-[2px_2px_0_0_#ca8a04]"
               defaultValue="score_vacancies"
             >
               <option value="score_vacancies">score_vacancies (оценка / заглушка)</option>
@@ -230,13 +237,13 @@ export function VacanciesList({
             </select>
           </label>
           {enqueueSecretRequired ? (
-            <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs">
-              <span className="text-zinc-500">Секрет (ENQUEUE_SECRET)</span>
+            <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs font-bold text-neutral-800 dark:text-amber-100">
+              <span>Секрет (ENQUEUE_SECRET)</span>
               <input
                 type="password"
                 name="enqueue_secret"
                 autoComplete="off"
-                className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950"
+                className="rounded-lg border-2 border-neutral-900 bg-white px-2 py-2 text-sm font-semibold text-neutral-900 shadow-[2px_2px_0_0_#171717] placeholder:text-neutral-400 dark:border-amber-200 dark:bg-neutral-900 dark:text-amber-50 dark:placeholder:text-amber-200/40 dark:shadow-[2px_2px_0_0_#ca8a04]"
                 placeholder="Как в Vercel"
               />
             </label>
@@ -246,33 +253,36 @@ export function VacanciesList({
           <button
             type="submit"
             disabled={isEnqueuePending}
-            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            className="rounded-xl border-2 border-neutral-900 bg-neutral-900 px-5 py-2.5 text-sm font-black text-yellow-300 shadow-[3px_3px_0_0_#facc15] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#facc15] disabled:opacity-50 dark:bg-yellow-400 dark:text-neutral-900 dark:shadow-[3px_3px_0_0_#171717] dark:hover:shadow-[2px_2px_0_0_#171717]"
           >
-            {isEnqueuePending ? "Отправка…" : "В очередь"}
+            {isEnqueuePending ? "⚡ Отправка…" : "⚡ В очередь!"}
           </button>
         </form>
         {state.message ? (
           <p
-            className={`mt-2 text-xs ${state.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}
+            className={`mt-3 text-xs font-bold ${state.ok ? "text-emerald-800 dark:text-emerald-300" : "text-rose-800 dark:text-rose-300"}`}
           >
             {state.message}
           </p>
         ) : null}
-        <p className="mt-2 text-xs">
-          <Link href="/jobs" className="text-blue-600 hover:underline dark:text-blue-400">
-            Открыть «Прогоны»
+        <p className="mt-2 text-xs font-bold">
+          <Link
+            href="/jobs"
+            className="text-neutral-900 underline decoration-2 decoration-rose-500 underline-offset-2 hover:text-rose-700 dark:text-amber-200 dark:decoration-amber-300 dark:hover:text-white"
+          >
+            → Открыть «Прогоны»
           </Link>
         </p>
       </section>
 
-      <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+      <label className="flex cursor-pointer items-center gap-2 rounded-full border-2 border-neutral-900 bg-yellow-100 px-3 py-2 text-sm font-bold text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-amber-200 dark:bg-yellow-600/20 dark:text-amber-50 dark:shadow-[2px_2px_0_0_#ca8a04]">
         <input
           type="checkbox"
           checked={hideApplied}
           onChange={(e) => setHideApplied(e.target.checked)}
-          className="rounded border-zinc-400"
+          className="size-4 rounded border-2 border-neutral-900 text-neutral-900 accent-rose-500 dark:border-amber-200 dark:accent-rose-400"
         />
-        Скрыть отмеченные «Откликнулся»
+        Скрыть уже «пика-пика» отмеченные
       </label>
 
       <ul className="space-y-4">
@@ -285,7 +295,9 @@ export function VacanciesList({
         ))}
       </ul>
       {visible.length === 0 && items.length > 0 ? (
-        <p className="text-sm text-zinc-500">Все отфильтрованы. Сними галку «Скрыть».</p>
+        <p className="rounded-xl border-2 border-neutral-900 bg-yellow-100 px-3 py-2 text-sm font-bold text-neutral-900 dark:border-amber-200 dark:bg-neutral-800 dark:text-amber-100">
+          Все спрятались — сними галку «Скрыть».
+        </p>
       ) : null}
     </div>
   );
