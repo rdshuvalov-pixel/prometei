@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { toErrorMessage } from "@/lib/errorMessage";
 import {
+  createdAtMs,
   numScore,
   preview,
   str,
@@ -19,10 +20,18 @@ export default async function VacanciesPage() {
   let loadError: string | null = null;
   try {
     const sb = getSupabaseAdmin();
-    const { data, error } = await sb
+    let res = await sb
       .from("vacancies")
       .select("*")
+      .order("created_at", { ascending: false })
       .limit(FETCH_CAP);
+    if (
+      res.error &&
+      /created_at|column/i.test(String(res.error.message ?? ""))
+    ) {
+      res = await sb.from("vacancies").select("*").limit(FETCH_CAP);
+    }
+    const { data, error } = res;
     if (error) throw error;
     raw = (data ?? []) as VacancyRow[];
   } catch (e) {
@@ -34,7 +43,11 @@ export default async function VacanciesPage() {
       const s = numScore(r);
       return s != null && s >= MIN_SCORE;
     })
-    .sort((a, b) => (numScore(b) ?? 0) - (numScore(a) ?? 0))
+    .sort((a, b) => {
+      const byTime = createdAtMs(b) - createdAtMs(a);
+      if (byTime !== 0) return byTime;
+      return (numScore(b) ?? 0) - (numScore(a) ?? 0);
+    })
     .slice(0, LIST_CAP);
 
   const below = raw.filter((r) => {
@@ -64,7 +77,8 @@ export default async function VacanciesPage() {
         <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
           vacancies
         </code>
-        ; фильтр по баллу на сервере страницы (без жёсткого{" "}
+        ; сортировка по дате в базе (новые сверху), затем по баллу при равной
+        дате; фильтр по баллу на сервере страницы (без жёсткого{" "}
         <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">.gte</code>{" "}
         в PostgREST).
       </p>

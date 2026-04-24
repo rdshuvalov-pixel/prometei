@@ -18,6 +18,17 @@ export function numScore(row: VacancyRow): number | null {
   return null;
 }
 
+/** Для сортировки «сначала новые»: первое валидное поле даты из типичных колонок. */
+export function createdAtMs(row: VacancyRow): number {
+  for (const k of ["created_at", "inserted_at", "updated_at"]) {
+    const v = row[k];
+    if (v == null || String(v).trim() === "") continue;
+    const t = new Date(String(v)).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  return 0;
+}
+
 export function preview(text: string, max = 220): string {
   const t = text.replace(/\s+/g, " ").trim();
   if (t.length <= max) return t;
