@@ -16,6 +16,7 @@
 | **API постановки в очередь** | `{Production URL}/api/jobs` — `POST`, JSON `{"job_type":"script_crawl"}` или `watchlist`; при наличии `ENQUEUE_SECRET` — заголовок `Authorization: Bearer …` |
 | **Supabase (проект)** | URL: `https://______.supabase.co` — регион и ref зафиксировать здесь: `________________` |
 | **Таблицы** | `public.vacancies`, `public.vacancy_sources`, `public.job_runs` — миграция [`migrations/001_job_runs.sql`](../migrations/001_job_runs.sql) при новой базе |
+| **Цели crawl** | [`search_targets.md`](search_targets.md), [`watchlist_targets.md`](watchlist_targets.md) — URL для `script_crawl.py` |
 | **VPS воркер** | Хост: `________________` — `docker compose -f docker-compose.worker.yml`; env из [`.env.worker.example`](../.env.worker.example) |
 | **Cron enqueue** | Расписание: `________________` — скрипт [`scripts/enqueue-cron.example.sh`](../scripts/enqueue-cron.example.sh), переменные `VERCEL_URL`, `ENQUEUE_SECRET` на машине с cron |
 | **Репозиторий** | `https://github.com/rdshuvalov-pixel/prometei` (или актуальный remote) |
