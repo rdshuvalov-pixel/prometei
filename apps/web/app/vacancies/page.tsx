@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { toErrorMessage } from "@/lib/errorMessage";
 import {
@@ -25,7 +26,12 @@ function formatCreatedLabel(createdRaw: string): string {
     : d.toLocaleString("ru-RU");
 }
 
-function toListItem(row: VacancyRow, index: number, nowMs: number): VacancyListItem {
+function toListItem(
+  row: VacancyRow,
+  index: number,
+  nowMs: number,
+  seenUntilMs: number,
+): VacancyListItem {
   const id = String(row.id ?? row.uuid ?? `row-${index}`);
   const userStatus =
     typeof row.user_status === "string" && row.user_status.trim() !== ""
@@ -34,7 +40,9 @@ function toListItem(row: VacancyRow, index: number, nowMs: number): VacancyListI
   const createdRaw = str(row, "created_at", "inserted_at");
   const t = createdAtMs(row);
   const applied = userStatus === "applied";
-  const showNewBadge = t > 0 && nowMs - t <= NEW_BADGE_MS && !applied;
+  const inRecentWindow = t > 0 && nowMs - t <= NEW_BADGE_MS;
+  const afterSeenCookie = t > seenUntilMs;
+  const showNewBadge = inRecentWindow && afterSeenCookie && !applied;
 
   return {
     id,
@@ -77,6 +85,10 @@ export default async function VacanciesPage() {
   }
 
   const nowMs = Date.now();
+  const jar = await cookies();
+  const seenRaw = jar.get("prometei_vacancies_seen_until")?.value;
+  const parsedSeen = seenRaw ? Date.parse(seenRaw) : 0;
+  const seenUntilMs = Number.isFinite(parsedSeen) ? parsedSeen : 0;
 
   const scored = raw
     .filter((r) => {
@@ -89,7 +101,7 @@ export default async function VacanciesPage() {
       return (numScore(b) ?? 0) - (numScore(a) ?? 0);
     })
     .slice(0, LIST_CAP)
-    .map((r, i) => toListItem(r, i, nowMs));
+    .map((r, i) => toListItem(r, i, nowMs, seenUntilMs));
 
   const below = raw.filter((r) => {
     const s = numScore(r);
@@ -125,8 +137,8 @@ export default async function VacanciesPage() {
           <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
             vacancies
           </code>
-          ; сортировка по дате (новые сверху), затем по баллу; метка «Новое» — попадание в базу за
-          последние 72 ч (и без отметки «Откликнулся»). Письма в списке не показываются — только
+          ; сортировка по дате (новые сверху), затем по баллу; метка «Новое» — после последнего
+          сброса и не старше 72 ч (и без «Откликнулся»). Письма в списке не показываются — только
           копирование. Ручной статус отклика пишется в{" "}
           <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
             user_status
