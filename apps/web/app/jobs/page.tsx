@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { toErrorMessage } from "@/lib/errorMessage";
-import { enqueueJob } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +62,7 @@ export default async function JobsPage() {
       <h1 className="mb-2 text-2xl font-semibold tracking-tight">
         История прогонов
       </h1>
-      <p className="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
         Таблица{" "}
         <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
           job_runs
@@ -74,29 +73,23 @@ export default async function JobsPage() {
         строке.
       </p>
 
-      <section className="mb-10 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-        <h2 className="mb-3 text-sm font-medium text-zinc-800 dark:text-zinc-200">
-          Запустить прогон
-        </h2>
-        <form action={enqueueJob} className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-zinc-600 dark:text-zinc-400">Тип</span>
-            <select
-              name="job_type"
-              className="rounded border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              defaultValue="script_crawl"
-            >
-              <option value="script_crawl">script_crawl</option>
-              <option value="watchlist">watchlist</option>
-            </select>
-          </label>
-          <button
-            type="submit"
-            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-          >
-            В очередь
-          </button>
-        </form>
+      <section className="mb-10 rounded-lg border border-zinc-200 bg-zinc-50/50 p-4 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-300">
+        <p className="font-medium text-zinc-900 dark:text-zinc-100">
+          Постановка в очередь только через API
+        </p>
+        <p className="mt-2">
+          <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">POST /api/jobs</code> с телом{" "}
+          <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
+            {`{"job_type":"script_crawl"}`}
+          </code>{" "}
+          или <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">watchlist</code>. Если в
+          Vercel задан <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">ENQUEUE_SECRET</code>
+          , добавь заголовок{" "}
+          <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">
+            Authorization: Bearer …
+          </code>
+          .
+        </p>
       </section>
 
       {loadError ? (
@@ -113,8 +106,9 @@ export default async function JobsPage() {
         </div>
       ) : jobs.length === 0 ? (
         <p className="text-sm text-zinc-500">
-          Пока нет строк. Нажми «В очередь» или дерни{" "}
-          <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">POST /api/jobs</code>.
+          Пока нет строк. Поставь задачу через{" "}
+          <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">POST /api/jobs</code> (cron или
+          вручную).
         </p>
       ) : (
         <ul className="space-y-4">
