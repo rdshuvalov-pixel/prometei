@@ -104,9 +104,10 @@ nano .env.worker
 Опционально:
 
 - **`POLL_INTERVAL_SEC`** — как часто опрашивать очередь (по умолчанию 20).
-- **`WORKER_CMD`** — пусто = stub **`done`**. Иначе одна из команд:
+- **`WORKER_CMD`** — пусто = stub **`done`**. Иначе одна из команд (путь **только** с префиксом **`/app/`** — так устроен [`Dockerfile.worker`](../Dockerfile.worker), `WORKDIR /app`):
   - **`python3 /app/prometheus_agent/script_crawl.py`** — обход URL из `search_targets.md` (или `watchlist_targets.md`, если в очереди **`job_type`:** `watchlist`). Отчёт: **`prometheus_agent/out/crawl_report_latest.md`** (в контейнере путь **`/app/prometheus_agent/out/`**).
   - **`python3 /app/prometheus_agent/worker_dispatch.py`** — по **`JOB_TYPE`** из задачи: обычный crawl или **`tier4_ashby`** → [`ashby_crawler.py`](../prometheus_agent/ashby_crawler.py) (Ashby public API, фильтр PM/Lead + EU/remote + возраст вакансии).
+  - Неверно: **`/data/prometheus_agent/...`** — в этом образе каталога **`/data`** нет, будет **`[Errno 2] No such file or directory`** и **`exit=2`**. Замени на **`/app/prometheus_agent/...`**.
 - **`MAX_CRAWL_URLS`** — лимит URL за прогон для `script_crawl`; **`0`** = без лимита (все ссылки из markdown).
 - **`CRAWL_DELAY_SEC`** — пауза между HTTP-запросами (сек).
 - **`CRAWL_SKIP_DOMAINS`** — через запятую; по умолчанию в коде отрезается **`weworkremotely.com`**.
@@ -189,7 +190,7 @@ export MAX_CRAWL_URLS=0 CRAWL_DELAY_SEC=1
 python3 prometheus_agent/script_crawl.py
 ```
 
-Сообщение **`/data/prometheus_agent/script_crawl.py: No such file`** не из этого репозитория: проверь **`type python3`**, **`alias`**, нет ли обёртки в **`.env.worker`** / cron.
+Ошибка **`can't open file '/data/prometheus_agent/script_crawl.py'`** / **`[Errno 2]`**: в **`.env.worker`** на VPS в **`WORKER_CMD`** стоит путь с **`/data/`**. Для **`docker-compose.worker.yml`** из этого репо нужно **`/app/prometheus_agent/...`**. Исправь строку, затем **`docker compose -f docker-compose.worker.yml up -d --build`** (или хотя бы **`restart`**, если образ уже с кодом в **`/app`**).
 
 ### 5.2 Greenhouse + Lever (`tier4_board_feeds`)
 
@@ -277,7 +278,7 @@ crontab -l
    cd /opt/prometei
    docker compose -f docker-compose.worker.yml logs --tail=300 worker
    ```
-4. Частые причины: **`WORKER_CMD`** не тот или путь к скрипту неверный; **`JOB_TIMEOUT_SEC`**; **exit≠0** у Python (ошибка в `script_crawl` / tier4 / сети / ключ Supabase в `.env.worker`); для типов tier4 — не заданы **`ASHBY_SLUGS`** и т.д. в `.env.worker`.
+4. Частые причины: **`WORKER_CMD`** не тот или путь к скрипту неверный (**`/data/...`** вместо **`/app/...`** в Docker из этого репо → **`exit=2`**, файл не найден); **`JOB_TIMEOUT_SEC`**; **exit≠0** у Python (ошибка в `script_crawl` / tier4 / сети / ключ Supabase в `.env.worker`); для типов tier4 — не заданы **`ASHBY_SLUGS`** и т.д. в `.env.worker`.
 
 ---
 
@@ -312,8 +313,8 @@ curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
 **С секретом в Vercel (`ENQUEUE_SECRET`) и без защиты деплоя (или с заголовком из §8.0):**
 
 ```bash
-export VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app"
-export ENQUEUE_SECRET="тот_же_секрет_что_в_Vercel_ENQUEUE_SECRET"
+export VERCEL_URL="https://prometei-rus-projects-782caf72.vercel.app"
+export ENQUEUE_SECRET="8fa7483ee05e2bfd634d70243da17019db4da088831cec1e58b5e8a8f6b63835"
 
 curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
   -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
