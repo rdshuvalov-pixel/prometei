@@ -103,7 +103,7 @@ nano .env.worker
 Опционально:
 
 - **`POLL_INTERVAL_SEC`** — как часто опрашивать очередь (по умолчанию 20).
-- **`WORKER_CMD`** — одна shell-команда внутри контейнера для реального прогона. **Пока строка закомментирована или пуста** — воркер только снимает `queued` и ставит **`done`** со stub в `counters` (чтобы очередь не зависала).
+- **`WORKER_CMD`** — по умолчанию в примере закомментировано; раскомментируй **`python3 /app/prometheus_agent/script_crawl.py`** для MVP-прогона (сводка по таблицам). Пусто — stub **`done`**.
 
 Сохрани файл: в `nano` — `Ctrl+O`, Enter, `Ctrl+X`.
 
@@ -255,8 +255,8 @@ curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
 **С секретом в Vercel (`ENQUEUE_SECRET`) и без защиты деплоя (или с заголовком из §8.0):**
 
 ```bash
-export VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app"
-export ENQUEUE_SECRET="твой_enqueue_secret_из_vercel"
+export VERCEL_URL="https://prometei-rus-projects-782caf72.vercel.app"
+export ENQUEUE_SECRET="8fa7483ee05e2bfd634d70243da17019db4da088831cec1e58b5e8a8f6b63835"
 
 curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
   -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
