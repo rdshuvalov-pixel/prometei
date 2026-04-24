@@ -233,8 +233,8 @@ crontab -l
 **С секретом в Vercel:**
 
 ```bash
-export VERCEL_URL="https://ТВОЙ-ПРОЕКТ.vercel.app"
-export ENQUEUE_SECRET="твой_секрет_из_vercel"
+export VERCEL_URL="https://prometei-rus-projects-782caf72.vercel.app"
+export ENQUEUE_SECRET="8fa7483ee05e2bfd634d70243da17019db4da088831cec1e58b5e8a8f6b63835"
 
 curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
   -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
@@ -274,7 +274,14 @@ curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
   -d '{"job_type":"script_crawl"}'
 ```
 
-Ожидание: **HTTP:201** и JSON с полем **`job`** (внутри **`id`**, **`status`**: обычно **`queued`**). Если **401** — Bearer не совпадает с Vercel или секрет не задан там, а ты его передал.
+Ожидание: **HTTP:201** и JSON с полем **`job`** (внутри **`id`**, **`status`**: обычно **`queued`**).
+
+**Если HTTP 401 Unauthorized** — в Vercel **задан** `ENQUEUE_SECRET`, а проверка заголовка не прошла:
+
+1. В **Vercel → Settings → Environment Variables** открой значение **`ENQUEUE_SECRET`** и сравни **побайтно** с тем, что в `export ENQUEUE_SECRET=...` (частая ошибка — лишний пробел/перенос строки при копировании, другой превью/прод набор env).
+2. Заголовок должен быть ровно: **`Authorization: Bearer ОДИН_ПРОБЕЛ_секрет`** (без кавычек вокруг секрета в самом заголовке curl).
+3. После смены секрета в Vercel обязателен **Redeploy** — иначе Edge крутит старый билд без нового значения.
+4. Временная проверка без секрета: удали переменную **`ENQUEUE_SECRET`** в Vercel (или очисти значение), **Redeploy**, тогда `POST` **без** `Authorization` снова откроется (в проде так не оставляй).
 
 ### 8.2. Посмотреть последние задачи через API (без секрета)
 
