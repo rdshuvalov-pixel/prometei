@@ -1,6 +1,9 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { toErrorMessage } from "@/lib/errorMessage";
 import { PrometeiShell } from "@/components/PrometeiShell";
+import { HomeDescription } from "@/components/HomeDescription";
+import { loadHomeDescriptionSplit } from "@/lib/loadHomeDescription";
+import { VACANCY_STATUS_SCORED } from "@/lib/vacancyStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +40,8 @@ function counterNum(counters: unknown, key: string): number | null {
 }
 
 export default async function Home() {
+  const { en, ru } = await loadHomeDescriptionSplit();
+
   let vacancyTotal: number | null = null;
   let draftsCount: number | null = null;
   let jobsTotal: number | null = null;
@@ -56,7 +61,7 @@ export default async function Home() {
       .from("vacancies")
       .select("*", { count: "exact", head: true })
       .eq("match_status", "pending_score")
-      .neq("status", "scored");
+      .neq("status", VACANCY_STATUS_SCORED);
     if (dErr) throw dErr;
     draftsCount = dCount ?? 0;
 
@@ -96,32 +101,20 @@ export default async function Home() {
     ? (() => {
         const raw = lastJob.finished_at ?? lastJob.started_at ?? lastJob.created_at;
         const d = new Date(String(raw ?? ""));
-        return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("ru-RU");
+        return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("en-US");
       })()
     : "—";
 
   return (
     <PrometeiShell active="home">
-      <h1 className="text-3xl font-black tracking-tight text-neutral-900 dark:text-amber-50">
-        Прометей
-      </h1>
-      <p className="mt-4 text-base font-medium leading-relaxed text-neutral-800 dark:text-amber-100/90">
-        Это мой пет-проект: я спроектировал и разработал end-to-end систему под свой поиск работы — от
-        сбора вакансий с площадок и дедупликации до очереди фоновых прогонов и удобного просмотра
-        отобранных ролей. Сайт можно спокойно ссылать в резюме и портфолио как демо продукта, которым
-        я пользуюсь сам.
-      </p>
-      <p className="mt-3 text-sm font-medium leading-relaxed text-neutral-700 dark:text-amber-100/80">
-        Ниже — живой срез состояния: сколько вакансий в базе, что ещё ждёт оценки, как прошёл последний
-        завершённый прогон. Отдельно в меню — список вакансий с фильтром и журнал прогонов.
-      </p>
+      <HomeDescription en={en} ru={ru} />
 
       <section
         className="mt-8 rounded-2xl border-4 border-neutral-900 bg-white/90 p-4 shadow-[4px_4px_0_0_#171717] dark:bg-neutral-900/80 dark:shadow-[4px_4px_0_0_#fbbf24]"
-        aria-label="Стек"
+        aria-label="Stack"
       >
         <h2 className="text-xs font-black uppercase tracking-wide text-neutral-900 dark:text-amber-50">
-          Технологии
+          Stack
         </h2>
         <p className="mt-2 text-sm font-medium text-neutral-800 dark:text-amber-100/85">
           Next.js · Vercel · Supabase · Docker · VPS
@@ -130,54 +123,51 @@ export default async function Home() {
 
       {statsError ? (
         <p className="mt-6 rounded-2xl border-4 border-amber-600 bg-amber-100 p-3 text-xs font-bold text-amber-950 dark:border-amber-400 dark:bg-amber-950/40 dark:text-amber-100">
-          Сводка из базы недоступна: {statsError}
+          Live stats unavailable: {statsError}
         </p>
       ) : (
         <dl className="mt-8 grid gap-3 rounded-2xl border-4 border-neutral-900 bg-yellow-100/60 p-4 text-sm font-semibold text-neutral-900 shadow-[4px_4px_0_0_#171717] dark:border-amber-200 dark:bg-yellow-600/15 dark:text-amber-50 dark:shadow-[4px_4px_0_0_#ca8a04]">
           <div className="flex flex-wrap justify-between gap-2">
-            <dt className="text-neutral-700 dark:text-amber-200/80">Вакансий в базе</dt>
+            <dt className="text-neutral-700 dark:text-amber-200/80">Vacancies in database</dt>
             <dd className="tabular-nums">{vacancyTotal ?? "—"}</dd>
           </div>
           <div className="flex flex-wrap justify-between gap-2">
-            <dt className="text-neutral-700 dark:text-amber-200/80">Ждут оценки (ещё не Scored)</dt>
+            <dt className="text-neutral-700 dark:text-amber-200/80">
+              Awaiting scoring (not yet {VACANCY_STATUS_SCORED})
+            </dt>
             <dd className="tabular-nums">{draftsCount ?? "—"}</dd>
           </div>
           <div className="flex flex-wrap justify-between gap-2">
-            <dt className="text-neutral-700 dark:text-amber-200/80">Записей о прогонах</dt>
+            <dt className="text-neutral-700 dark:text-amber-200/80">Run history rows</dt>
             <dd className="tabular-nums">{jobsTotal ?? "—"}</dd>
           </div>
           <div className="col-span-full border-t-2 border-dashed border-neutral-900/25 pt-3 dark:border-amber-200/30">
             <p className="text-xs font-black uppercase tracking-wide text-neutral-800 dark:text-amber-100">
-              Последний завершённый прогон
+              Last finished run
             </p>
             <div className="mt-2 grid gap-1 text-xs">
               <div className="flex flex-wrap justify-between gap-2">
-                <span className="text-neutral-600 dark:text-amber-200/70">Тип и исход</span>
+                <span className="text-neutral-600 dark:text-amber-200/70">Type & outcome</span>
                 <span>
                   {lastType} · {lastStatus}
                 </span>
               </div>
               <div className="flex flex-wrap justify-between gap-2">
-                <span className="text-neutral-600 dark:text-amber-200/70">Время</span>
+                <span className="text-neutral-600 dark:text-amber-200/70">Time</span>
                 <span>{lastFinishedLabel}</span>
               </div>
               <div className="flex flex-wrap justify-between gap-2">
-                <span className="text-neutral-600 dark:text-amber-200/70">
-                  Новых позиций за прогон
-                </span>
+                <span className="text-neutral-600 dark:text-amber-200/70">New rows this run</span>
                 <span className="tabular-nums">{inserted ?? "—"}</span>
               </div>
               <div className="flex flex-wrap justify-between gap-2">
-                <span className="text-neutral-600 dark:text-amber-200/70">
-                  Страниц обхода (crawl)
-                </span>
+                <span className="text-neutral-600 dark:text-amber-200/70">Pages fetched (crawl)</span>
                 <span className="tabular-nums">{urlsAttempted ?? "—"}</span>
               </div>
             </div>
             {!lastJob ? (
               <p className="mt-2 text-[11px] font-medium text-neutral-600 dark:text-amber-200/60">
-                Пока нет завершённых прогонов — как только воркер отработает задачу, здесь появятся
-                цифры.
+                No finished runs yet — numbers will appear after the worker completes a job.
               </p>
             ) : null}
           </div>

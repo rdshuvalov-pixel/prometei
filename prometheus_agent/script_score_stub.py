@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Заглушка очереди «оценка»: считает вакансии без скоринга; переводит в status=scored строки
+Заглушка очереди «оценка»: считает вакансии без скоринга; переводит в status=Scored строки
 с score >= SCORE_PROMOTE_MIN (по умолчанию 50) и match_status=pending_score. Полноценный
 28-параметровый скоринг — отдельный слой.
 """
@@ -54,10 +54,10 @@ def main() -> None:
     try:
         up = (
             sb.table("vacancies")
-            .update({"status": "scored"})
+            .update({"status": "Scored"})
             .eq("match_status", "pending_score")
             .gte("score", min_score)
-            .or_("status.is.null,status.neq.scored")
+            .or_("status.is.null,status.neq.Scored")
             .select("id")
             .execute()
         )

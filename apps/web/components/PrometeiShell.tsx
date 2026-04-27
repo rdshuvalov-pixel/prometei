@@ -24,16 +24,16 @@ export function PrometeiShell({
         <div className="relative mb-8 flex flex-wrap items-center justify-between gap-4">
           <nav className="flex flex-wrap gap-4 text-sm font-medium text-neutral-800 dark:text-amber-100/90">
             <Link className={active === "home" ? pillActive : pillInactive} href="/">
-              Главная
+              Home
             </Link>
             <Link
               className={active === "vacancies" ? pillActive : pillInactive}
               href="/vacancies"
             >
-              Вакансии
+              Vacancies
             </Link>
             <Link className={active === "jobs" ? pillActive : pillInactive} href="/jobs">
-              Прогоны
+              Runs
             </Link>
           </nav>
           {headerRight ? (

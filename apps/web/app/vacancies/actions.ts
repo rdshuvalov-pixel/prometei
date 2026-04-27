@@ -11,13 +11,13 @@ export async function setVacancyUserStatusAction(
 ): Promise<VacancyStatusState> {
   const id = vacancyId.trim();
   if (!id) {
-    return { ok: false, message: "Пустой id вакансии." };
+    return { ok: false, message: "Vacancy id is empty." };
   }
   if (id.startsWith("row-")) {
     return {
       ok: false,
       message:
-        "У записи нет id в ответе Supabase — проверь таблицу vacancies (должна быть колонка id).",
+        "This row has no stable id from the database — check that the vacancies table exposes an id column.",
     };
   }
   try {
@@ -36,18 +36,18 @@ export async function setVacancyUserStatusAction(
       return {
         ok: false,
         message:
-          "Строка не обновлена (0 строк). Часто: нет колонок user_status / id не совпал. Выполни migrations/002_vacancies_user_status.sql и проверь id в Supabase.",
+          "No row updated. Often: missing user_status column or id mismatch — apply the user_status migration in Supabase.",
       };
     }
     revalidatePath("/vacancies");
-    return { ok: true, message: "Сохранено." };
+    return { ok: true, message: "Saved." };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/user_status|column|schema/i.test(msg)) {
       return {
         ok: false,
         message:
-          "Колонки user_status нет в БД. Выполни migrations/002_vacancies_user_status.sql в Supabase.",
+          "The user_status column is missing in the database. Add it via your Supabase migration for vacancies.",
       };
     }
     return { ok: false, message: msg };

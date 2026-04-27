@@ -19,7 +19,7 @@
 
 Веб и API ожидают вставку с полями **`job_type`**, **`counters`** (можно `{}`), **`payload`**, **`status`**.
 
-**Вакансии в UI:** по умолчанию **`/vacancies`** — все записи; фильтр **Status = Scored** — query **`?filter=scored`**. Пайплайн после скоринга выставляет **`scored`** (в репо — заглушка **`script_score_stub.py`**: при `match_status = pending_score` и `score >= SCORE_PROMOTE_MIN` по умолчанию 50).
+**Вакансии в UI:** по умолчанию **`/vacancies`** — все записи; фильтр **Status = Scored** — **`?filter=Scored`**. Пайплайн выставляет значение **`Scored`** (заглушка **`script_score_stub.py`**: `match_status = pending_score`, `score >= SCORE_PROMOTE_MIN`, по умолчанию 50).
 
 **Скрытый полный запуск:** на странице `/jobs` в правом верхнем углу (невидимая зона) можно поставить в очередь три задачи (`script_crawl`, `tier4_board_feeds`, `tier4_ashby`); не чаще **2 раз за календарные сутки UTC** (httpOnly cookie). Основной путь постановки — **`POST /api/jobs`**.
 

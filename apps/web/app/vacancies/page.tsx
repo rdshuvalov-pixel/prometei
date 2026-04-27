@@ -9,6 +9,7 @@ import {
 import { PrometeiShell } from "@/components/PrometeiShell";
 import { VacanciesList, type VacancyListItem } from "./VacanciesList";
 import { VacanciesStatusFilter } from "./VacanciesStatusFilter";
+import { isScoredFilterParam, VACANCY_STATUS_SCORED } from "@/lib/vacancyStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ function formatCreatedLabel(createdRaw: string): string {
   const d = new Date(createdRaw);
   return Number.isNaN(d.getTime())
     ? createdRaw
-    : d.toLocaleString("ru-RU");
+    : d.toLocaleString("en-US");
 }
 
 function toListItem(row: VacancyRow, index: number): VacancyListItem {
@@ -53,7 +54,7 @@ function toListItem(row: VacancyRow, index: number): VacancyListItem {
 
 export default async function VacanciesPage({ searchParams }: PageProps) {
   const sp = await searchParams;
-  const onlyScored = sp.filter === "scored";
+  const onlyScored = isScoredFilterParam(sp.filter);
 
   let raw: VacancyRow[] = [];
   let loadError: string | null = null;
@@ -65,7 +66,7 @@ export default async function VacanciesPage({ searchParams }: PageProps) {
       .order("created_at", { ascending: false })
       .limit(FETCH_CAP);
     if (onlyScored) {
-      q = q.eq("status", "scored");
+      q = q.eq("status", VACANCY_STATUS_SCORED);
     }
     let res = await q;
     if (
@@ -74,7 +75,7 @@ export default async function VacanciesPage({ searchParams }: PageProps) {
     ) {
       let q2 = sb.from("vacancies").select("*").limit(FETCH_CAP);
       if (onlyScored) {
-        q2 = q2.eq("status", "scored");
+        q2 = q2.eq("status", VACANCY_STATUS_SCORED);
       }
       res = await q2;
     }
@@ -97,20 +98,20 @@ export default async function VacanciesPage({ searchParams }: PageProps) {
   return (
     <PrometeiShell active="vacancies">
       <h1 className="mb-2 text-2xl font-black tracking-tight text-neutral-900 dark:text-amber-50">
-        Вакансии
+        Vacancies
       </h1>
       <p className="mb-2 text-sm font-medium text-neutral-800/90 dark:text-amber-100/80">
         {onlyScored
-          ? "Показаны позиции с Status = Scored (после оценки в пайплайне). Переключатель ниже — вернуться ко всем записям."
-          : `Полный список в базе (до ${FETCH_CAP} строк в выборке, в карточках до ${LIST_CAP}). Отметка «откликнулся» хранится в карточке.`}
+          ? `Showing rows with Status = ${VACANCY_STATUS_SCORED} (after scoring in the pipeline). Use the toggle below to see all records.`
+          : `All rows in the database (up to ${FETCH_CAP} in this fetch, up to ${LIST_CAP} cards). Applied status is stored on each card.`}
       </p>
 
       <VacanciesStatusFilter onlyScored={onlyScored} />
 
       {!loadError && raw.length > 0 && (
         <p className="mb-6 text-xs font-semibold text-neutral-700 dark:text-amber-200/70">
-          В выборке: {raw.length}, показано: {items.length}
-          {onlyScored ? " (Status = Scored)" : ""}
+          In fetch: {raw.length}, displayed: {items.length}
+          {onlyScored ? ` (Status = ${VACANCY_STATUS_SCORED})` : ""}
         </p>
       )}
 
@@ -121,8 +122,8 @@ export default async function VacanciesPage({ searchParams }: PageProps) {
       ) : raw.length === 0 ? (
         <p className="text-sm font-medium text-neutral-700 dark:text-amber-200/80">
           {onlyScored
-            ? "Пока нет вакансий со Status = Scored. Выбери «Все вакансии» или дождись, пока пайплайн отметит подходящие строки."
-            : "Список пуст или нет доступа к данным. Проверь настройки подключения к базе в окружении деплоя."}
+            ? `No vacancies with Status = ${VACANCY_STATUS_SCORED} yet. Switch to “All vacancies” or wait until the pipeline promotes matching rows.`
+            : "No rows or no database access. Check deployment environment variables."}
         </p>
       ) : (
         <VacanciesList items={items} />
