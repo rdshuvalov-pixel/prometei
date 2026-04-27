@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react";
 import { enqueueFullSearchFromSecret } from "./actions";
 
-/** Invisible hit target: top-right on Runs page. */
+/**
+ * Invisible 8×8 launch hit area — parent should position (e.g. fixed bottom-right in shell).
+ */
 export function JobsSecretTrigger() {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
@@ -17,7 +19,7 @@ export function JobsSecretTrigger() {
   }
 
   return (
-    <div className="relative h-8 w-8 shrink-0">
+    <div className="relative h-full w-full">
       <button
         type="button"
         title=""
