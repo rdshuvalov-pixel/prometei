@@ -19,6 +19,10 @@
 
 Веб и API ожидают вставку с полями **`job_type`**, **`counters`** (можно `{}`), **`payload`**, **`status`**.
 
+**Вакансии в UI:** список `/vacancies` берёт только строки с **`status = scored`**. Пайплайн после скоринга должен выставлять это поле (в репо — заглушка **`prometheus_agent/script_score_stub.py`**: при `match_status = pending_score` и `score >= SCORE_PROMOTE_MIN` по умолчанию 50).
+
+**Скрытый полный запуск:** на странице `/jobs` в правом верхнем углу (невидимая зона) можно поставить в очередь три задачи (`script_crawl`, `tier4_board_feeds`, `tier4_ashby`); не чаще **2 раз за календарные сутки UTC** (httpOnly cookie). Основной путь постановки — **`POST /api/jobs`**.
+
 ---
 
 ## 2. Vercel — Production env и URL
@@ -44,11 +48,12 @@
 ## 3. Воркер на VPS (Contabo и т.п.)
 
 **Пошаговые команды в терминале (SSH, Docker, cron):** [`docs/ИНСТРУКЦИЯ_VPS_ВОРКЕР_CRON.md`](docs/ИНСТРУКЦИЯ_VPS_ВОРКЕР_CRON.md).  
+**После правок в git:** [`docs/ОБНОВЛЕНИЕ_ПОСЛЕ_ИЗМЕНЕНИЙ.md`](docs/ОБНОВЛЕНИЕ_ПОСЛЕ_ИЗМЕНЕНИЙ.md) (push, Vercel, VPS).  
 **Перед эксплуатацией:** чеклист [`docs/PREPROD_CHECKLIST.md`](docs/PREPROD_CHECKLIST.md).
 
 1. Скопируй на сервер репозиторий (или только каталоги `worker/`, `Dockerfile.worker`, `docker-compose.worker.yml`, `requirements-worker.txt`).
 2. `cp .env.worker.example .env.worker` и заполни **`SUPABASE_URL`**, **`SUPABASE_SERVICE_ROLE_KEY`**.
-3. В **`.env.worker`** задай **`WORKER_CMD`**: либо **`python3 /app/prometheus_agent/script_crawl.py`** (career crawl + отчёт в `prometheus_agent/out/`), либо **`python3 /app/prometheus_agent/worker_dispatch.py`** — тогда по **`job_type`**: crawl, **`tier4_ashby`**, **`tier4_board_feeds`** (Greenhouse + Lever, см. [`board_feeds_tier4.py`](prometheus_agent/board_feeds_tier4.py)). Полный список URL: **`MAX_CRAWL_URLS=0`**. Пока **`WORKER_CMD` пуст** — stub **`done`**.
+3. В **`.env.worker`** задай **`WORKER_CMD`**: либо **`python3 /app/prometheus_agent/script_crawl.py`**, либо **`python3 /app/prometheus_agent/worker_dispatch.py`** (по **`job_type`**: crawl, **`tier4_ashby`**, **`tier4_board_feeds`**). Отчёты и **`crawl_url_cursor.json`** (ротация URL) — в томе **`prometheus_agent/out/`**. При лимите **`MAX_CRAWL_URLS`** (дефолт 30) за несколько прогонов обходятся **все** URL из markdown (**`CRAWL_ROTATE_URLS=1`** по умолчанию); разом весь список — **`MAX_CRAWL_URLS=0`**. Пока **`WORKER_CMD` пуст** — stub **`done`**.
 4. Запуск: `docker compose -f docker-compose.worker.yml up -d --build` (из корня репо). Логи: `docker compose -f docker-compose.worker.yml logs -f worker`.
 
 Один проход без цикла (отладка):  

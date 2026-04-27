@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { markAllVacanciesSeenAction, setVacancyUserStatusAction } from "./actions";
+import { setVacancyUserStatusAction } from "./actions";
 
 export type VacancyListItem = {
   id: string;
@@ -17,7 +17,6 @@ export type VacancyListItem = {
   formal: string;
   informal: string;
   userStatus: string | null;
-  showNewBadge: boolean;
 };
 
 function CopyBtn({
@@ -96,17 +95,12 @@ function VacancyCard({
         applied
           ? "bg-neutral-200/90 dark:bg-neutral-800/80"
           : "bg-white/95 dark:bg-neutral-900/90"
-      } ${row.showNewBadge && !applied ? "ring-4 ring-rose-400 ring-offset-2 ring-offset-[#FFECB3] dark:ring-rose-500 dark:ring-offset-neutral-950" : ""}`}
+      }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-black text-neutral-900 dark:text-amber-50">{row.company}</p>
-            {row.showNewBadge && !applied && (
-              <span className="shrink-0 rounded-full border-2 border-neutral-900 bg-rose-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-rose-200 dark:bg-rose-500 dark:text-white dark:shadow-[2px_2px_0_0_#881337]">
-                ⚡ Новое
-              </span>
-            )}
             {applied && (
               <span className="shrink-0 rounded-full border-2 border-neutral-900 bg-yellow-400 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-amber-200 dark:bg-amber-600/50 dark:text-amber-50">
                 Пика-пика ✓
@@ -196,39 +190,13 @@ function VacancyCard({
 export function VacanciesList({ items }: { items: VacancyListItem[] }) {
   const router = useRouter();
   const [hideApplied, setHideApplied] = useState(false);
-  const [resetMsg, setResetMsg] = useState<string | null>(null);
-  const [resetPending, startReset] = useTransition();
 
   const visible = hideApplied
     ? items.filter((r) => r.userStatus !== "applied")
     : items;
 
-  function onResetNew() {
-    setResetMsg(null);
-    startReset(async () => {
-      const res = await markAllVacanciesSeenAction();
-      setResetMsg(res.ok ? res.message : res.message);
-      router.refresh();
-    });
-  }
-
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={resetPending}
-          onClick={onResetNew}
-          className="rounded-full border-2 border-neutral-900 bg-white px-3 py-2 text-sm font-bold text-neutral-900 shadow-[2px_2px_0_0_#171717] hover:bg-yellow-100 disabled:opacity-50 dark:border-amber-200 dark:bg-neutral-800 dark:text-amber-50 dark:hover:bg-neutral-700"
-        >
-          {resetPending ? "…" : "Сбросить «Новое» у всех"}
-        </button>
-        {resetMsg ? (
-          <span className="text-xs font-semibold text-neutral-800 dark:text-amber-200/90">
-            {resetMsg}
-          </span>
-        ) : null}
-      </div>
       <label className="flex cursor-pointer items-center gap-2 rounded-full border-2 border-neutral-900 bg-yellow-100 px-3 py-2 text-sm font-bold text-neutral-900 shadow-[2px_2px_0_0_#171717] dark:border-amber-200 dark:bg-yellow-600/20 dark:text-amber-50 dark:shadow-[2px_2px_0_0_#ca8a04]">
         <input
           type="checkbox"

@@ -7,6 +7,9 @@
 
 Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY; опционально JOB_ID, JOB_TYPE, MAX_CRAWL_URLS,
 CRAWL_DELAY_SEC, CRAWL_SKIP_DOMAINS (через запятую; по умолчанию weworkremotely.com).
+CRAWL_ROTATE_URLS (по умолчанию 1): при лимите MAX_CRAWL_URLS очередной прогон берёт следующее
+окно URL по кругу; смещение в prometheus_agent/out/crawl_url_cursor.json (том на VPS).
+CRAWL_ROTATE_URLS=0 — старое поведение (всегда первые N URL).
 
 Шаг 4 (листинг): script type application/ld+json с @type JobPosting и datePosted; старше
 LISTING_MAX_AGE_DAYS (по умолчанию 5) не вставляем; без datePosted — вставка с date_unknown.
@@ -300,6 +303,112 @@ def _max_crawl_urls() -> int | None:
     return n
 
 
+def _crawl_rotate_enabled() -> bool:
+    raw = (os.environ.get("CRAWL_ROTATE_URLS") or "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def _crawl_cursor_path(out_dir: Path) -> Path:
+    return out_dir / "crawl_url_cursor.json"
+
+
+def _load_crawl_cursor(out_dir: Path, url_count: int, targets_key: str) -> int:
+    if url_count <= 0:
+        return 0
+    p = _crawl_cursor_path(out_dir)
+    if not p.is_file():
+        return 0
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if str(data.get("targets_key", "")) != targets_key:
+        return 0
+    try:
+        stored_n = int(data.get("url_count", -1))
+    except (TypeError, ValueError):
+        stored_n = -1
+    if stored_n != url_count:
+        return 0
+    try:
+        start = int(data.get("start", 0))
+    except (TypeError, ValueError):
+        return 0
+    return start % url_count
+
+
+def _save_crawl_cursor(
+    out_dir: Path,
+    next_start: int,
+    url_count: int,
+    targets_key: str,
+) -> None:
+    if url_count <= 0:
+        return
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"WARN: не удалось сохранить crawl cursor: {e}", file=sys.stderr)
+        return
+    payload = {
+        "start": next_start % url_count,
+        "url_count": url_count,
+        "targets_key": targets_key,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    p = _crawl_cursor_path(out_dir)
+    tmp = p.with_suffix(".json.tmp")
+    try:
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(p)
+    except OSError as e:
+        print(f"WARN: crawl cursor write failed: {e}", file=sys.stderr)
+
+
+def _take_crawl_batch(
+    urls: list[tuple[str, str]],
+    base: Path,
+    targets_path: Path,
+) -> tuple[list[tuple[str, str]], dict[str, object], tuple[Path, int, int, str] | None]:
+    """
+    При лимите MAX_CRAWL_URLS и включённой ротации — окно из len(urls) по кругу.
+    Возвращает (batch, meta для counters, аргументы для _save_crawl_cursor после успешного прогона).
+    """
+    max_n = _max_crawl_urls()
+    L = len(urls)
+    meta: dict[str, object] = {
+        "crawl_url_total": L,
+        "crawl_batch_size": L,
+        "crawl_rotate_active": False,
+        "crawl_cursor_before": 0,
+        "crawl_cursor_after": 0,
+    }
+    if L == 0:
+        return [], meta, None
+    if max_n is None or L <= max_n:
+        return list(urls), meta, None
+    if not _crawl_rotate_enabled():
+        meta["crawl_batch_size"] = max_n
+        return urls[:max_n], meta, None
+    out_dir = base / "out"
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"WARN: {out_dir} недоступен, ротация отключена: {e}", file=sys.stderr)
+        meta["crawl_batch_size"] = max_n
+        return urls[:max_n], meta, None
+    key = targets_path.name
+    start = _load_crawl_cursor(out_dir, L, key)
+    batch = [urls[(start + i) % L] for i in range(max_n)]
+    after = (start + max_n) % L
+    meta["crawl_rotate_active"] = True
+    meta["crawl_cursor_before"] = start
+    meta["crawl_cursor_after"] = after
+    meta["crawl_batch_size"] = len(batch)
+    meta["crawl_cursor_file"] = str(_crawl_cursor_path(out_dir))
+    return batch, meta, (out_dir, after, L, key)
+
+
 def _write_crawl_report(base: Path, counters: dict, job_id: str) -> Path | None:
     """Markdown-отчёт: шапка с ошибками и счётчиками по tier."""
     out_dir = base / "out"
@@ -356,10 +465,7 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
     fetch_errors_urls: list[str] = []
     ldjson_skipped_stale_total = 0
     ldjson_listings_seen = 0
-    max_n = _max_crawl_urls()
     delay = float(os.environ.get("CRAWL_DELAY_SEC", "1.0"))
-    if max_n is not None:
-        urls = urls[:max_n]
     tier_stats: dict[str, dict[str, int]] = defaultdict(
         lambda: {"attempted": 0, "inserted": 0, "duplicates": 0, "errors": 0},
     )
@@ -555,12 +661,24 @@ def main() -> None:
         print("Нет URL (добавь незакомментированные https:// строки в markdown). Сводка:")
         counters["skipped"] = "no_urls"
     else:
+        batch, batch_meta, cursor_save = _take_crawl_batch(urls, base, path)
+        counters.update(batch_meta)
+        if batch_meta.get("crawl_rotate_active"):
+            print(
+                f"crawl rotate: total={batch_meta.get('crawl_url_total')} "
+                f"cursor {batch_meta.get('crawl_cursor_before')}→{batch_meta.get('crawl_cursor_after')} "
+                f"batch={batch_meta.get('crawl_batch_size')}",
+                flush=True,
+            )
         dedup = _load_dedup_pairs(sb)
         print(f"dedup_pairs_loaded={len(dedup)}")
         t4q = tier4_query.load_tier4_query(base)
-        crawl_stats = _run_crawl(sb, urls, dedup, t4q)
+        crawl_stats = _run_crawl(sb, batch, dedup, t4q)
         counters["tier4_query_resolved"] = t4q
         counters.update(crawl_stats)
+        if cursor_save is not None:
+            od, after, n_urls, tkey = cursor_save
+            _save_crawl_cursor(od, after, n_urls, tkey)
 
     after_v = _count_head(sb, "vacancies")
     after_s = _count_head(sb, "vacancy_sources")
