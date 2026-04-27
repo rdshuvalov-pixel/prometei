@@ -8,11 +8,16 @@ import {
 } from "@/lib/vacancyDisplay";
 import { PrometeiShell } from "@/components/PrometeiShell";
 import { VacanciesList, type VacancyListItem } from "./VacanciesList";
+import { VacanciesStatusFilter } from "./VacanciesStatusFilter";
 
 export const dynamic = "force-dynamic";
 
 const FETCH_CAP = 400;
 const LIST_CAP = 100;
+
+type PageProps = {
+  searchParams: Promise<{ filter?: string }>;
+};
 
 function formatCreatedLabel(createdRaw: string): string {
   if (createdRaw === "—") return "—";
@@ -46,26 +51,32 @@ function toListItem(row: VacancyRow, index: number): VacancyListItem {
   };
 }
 
-export default async function VacanciesPage() {
+export default async function VacanciesPage({ searchParams }: PageProps) {
+  const sp = await searchParams;
+  const onlyScored = sp.filter === "scored";
+
   let raw: VacancyRow[] = [];
   let loadError: string | null = null;
   try {
     const sb = getSupabaseAdmin();
-    let res = await sb
+    let q = sb
       .from("vacancies")
       .select("*")
-      .eq("status", "scored")
       .order("created_at", { ascending: false })
       .limit(FETCH_CAP);
+    if (onlyScored) {
+      q = q.eq("status", "scored");
+    }
+    let res = await q;
     if (
       res.error &&
       /created_at|column/i.test(String(res.error.message ?? ""))
     ) {
-      res = await sb
-        .from("vacancies")
-        .select("*")
-        .eq("status", "scored")
-        .limit(FETCH_CAP);
+      let q2 = sb.from("vacancies").select("*").limit(FETCH_CAP);
+      if (onlyScored) {
+        q2 = q2.eq("status", "scored");
+      }
+      res = await q2;
     }
     const { data, error } = res;
     if (error) throw error;
@@ -86,27 +97,20 @@ export default async function VacanciesPage() {
   return (
     <PrometeiShell active="vacancies">
       <h1 className="mb-2 text-2xl font-black tracking-tight text-neutral-900 dark:text-amber-50">
-        Вакансии (status = scored)
+        Вакансии
       </h1>
       <p className="mb-2 text-sm font-medium text-neutral-800/90 dark:text-amber-100/80">
-        Список только строк с{" "}
-        <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
-          status = scored
-        </code>{" "}
-        (проставляет пайплайн после скоринга). До {FETCH_CAP} записей, в карточках — до{" "}
-        {LIST_CAP}. Ручной статус отклика —{" "}
-        <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
-          user_status
-        </code>{" "}
-        (миграция{" "}
-        <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
-          002_vacancies_user_status.sql
-        </code>
-        ).
+        {onlyScored
+          ? "Показаны позиции с Status = Scored (после оценки в пайплайне). Переключатель ниже — вернуться ко всем записям."
+          : `Полный список в базе (до ${FETCH_CAP} строк в выборке, в карточках до ${LIST_CAP}). Отметка «откликнулся» хранится в карточке.`}
       </p>
+
+      <VacanciesStatusFilter onlyScored={onlyScored} />
+
       {!loadError && raw.length > 0 && (
         <p className="mb-6 text-xs font-semibold text-neutral-700 dark:text-amber-200/70">
-          В выборке: {raw.length}, показано в списке: {items.length}
+          В выборке: {raw.length}, показано: {items.length}
+          {onlyScored ? " (Status = Scored)" : ""}
         </p>
       )}
 
@@ -116,11 +120,9 @@ export default async function VacanciesPage() {
         </p>
       ) : raw.length === 0 ? (
         <p className="text-sm font-medium text-neutral-700 dark:text-amber-200/80">
-          Нет строк со статусом scored (или нет доступа). Проверь env на Vercel и что воркер /
-          <code className="mx-0.5 rounded border border-neutral-800 bg-yellow-200/70 px-1 font-mono dark:bg-yellow-500/15">
-            script_score_stub.py
-          </code>{" "}
-          переводит подходящие строки в scored.
+          {onlyScored
+            ? "Пока нет вакансий со Status = Scored. Выбери «Все вакансии» или дождись, пока пайплайн отметит подходящие строки."
+            : "Список пуст или нет доступа к данным. Проверь настройки подключения к базе в окружении деплоя."}
         </p>
       ) : (
         <VacanciesList items={items} />
