@@ -1,29 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
-const SEEN_COOKIE = "prometei_vacancies_seen_until";
-
 export type VacancyStatusState = { ok: boolean; message: string };
-
-export async function markAllVacanciesSeenAction(): Promise<VacancyStatusState> {
-  try {
-    const jar = await cookies();
-    jar.set(SEEN_COOKIE, new Date().toISOString(), {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 400,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
-    revalidatePath("/vacancies");
-    return { ok: true, message: "Метки «Новое» сброшены для текущего списка." };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, message: msg };
-  }
-}
 
 export async function setVacancyUserStatusAction(
   vacancyId: string,
