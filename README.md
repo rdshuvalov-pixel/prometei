@@ -21,7 +21,7 @@
 
 **Вакансии в UI:** по умолчанию **`/vacancies`** — все записи; фильтр **Status = Scored** — **`?filter=Scored`**. Пайплайн выставляет значение **`Scored`** (заглушка **`script_score_stub.py`**: `match_status = pending_score`, `score >= SCORE_PROMOTE_MIN`, по умолчанию 50).
 
-**Скрытый полный запуск:** на странице `/jobs` в **нижнем правом углу** поверх зоны маскота (невидимая область **8×8 px**) — три задачи в очередь (`script_crawl`, `tier4_board_feeds`, `tier4_ashby`); не чаще **2 раз за сутки UTC** (httpOnly cookie). Основной путь — **`POST /api/jobs`**.
+**Скрытый полный запуск:** на странице `/jobs` в **нижнем правом углу** поверх зоны маскота (невидимая область **25×25 px**) — три задачи в очередь (`script_crawl`, `tier4_board_feeds`, `tier4_ashby`); не чаще **2 раз за сутки UTC** (httpOnly cookie). Основной путь — **`POST /api/jobs`**.
 
 ---
 
