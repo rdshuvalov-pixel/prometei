@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { PikachuPeek } from "./PikachuPeek";
 
 export type PrometeiNav = "home" | "vacancies" | "jobs";
 
@@ -19,8 +20,9 @@ export function PrometeiShell({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#FFFDE7] via-[#FFF9C4] to-[#FFECB3] dark:from-neutral-950 dark:via-[#291c0e] dark:to-neutral-950">
-      <div className="mx-auto max-w-3xl px-4 py-10">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#FFFDE7] via-[#FFF9C4] to-[#FFECB3] dark:from-neutral-950 dark:via-[#291c0e] dark:to-neutral-950">
+      <PikachuPeek />
+      <div className="relative z-10 mx-auto max-w-3xl px-4 py-10">
         <div className="relative mb-8 flex flex-wrap items-center justify-between gap-4">
           <nav className="flex flex-wrap gap-4 text-sm font-medium text-neutral-800 dark:text-amber-100/90">
             <Link className={active === "home" ? pillActive : pillInactive} href="/">
