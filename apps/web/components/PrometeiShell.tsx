@@ -26,7 +26,8 @@ export function PrometeiShell({
     <div className="relative min-h-screen bg-gradient-to-b from-[#FFFDE7] via-[#FFF9C4] to-[#FFECB3] dark:from-neutral-950 dark:via-[#291c0e] dark:to-neutral-950">
       <PikachuPeek />
       {fixedBottomRight ? (
-        <div className="pointer-events-auto fixed bottom-2 right-2 z-20 h-8 w-8 sm:bottom-3 sm:right-3">
+        /* TEMP: видимая зона запуска — убрать bg/orange и вернуть h-8 w-8 после проверки */
+        <div className="pointer-events-auto fixed bottom-2 right-2 z-20 h-[18px] w-[18px] bg-orange-500 sm:bottom-3 sm:right-3">
           {fixedBottomRight}
         </div>
       ) : null}
