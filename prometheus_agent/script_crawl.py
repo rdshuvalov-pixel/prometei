@@ -13,6 +13,9 @@ CRAWL_ROTATE_URLS=0 — старое поведение (всегда первы
 
 Шаг 4 (листинг): script type application/ld+json с @type JobPosting и datePosted; старше
 LISTING_MAX_AGE_DAYS (по умолчанию 5) не вставляем; без datePosted — вставка с date_unknown.
+
+Если на странице нет JobPosting, fallback по <title> не вставляется для URL с одним сегментом
+пути вроде /careers, /jobs (карьерный хаб, не конкретная вакансия).
 """
 
 from __future__ import annotations
@@ -160,6 +163,39 @@ def _guess_company_role(title: str, netloc: str) -> tuple[str, str]:
     if len(t) > 120:
         return (netloc or "web")[:500], t[:500]
     return (netloc or "web")[:500], (t or "role")[:500]
+
+
+# Один сегмент пути — типичный карьерный хаб; без JobPosting в ld+json это не конкретная роль.
+_CAREERS_HUB_SEGMENTS = frozenset(
+    {
+        "careers",
+        "jobs",
+        "vacancies",
+        "join",
+        "join-us",
+        "opportunities",
+        "work-with-us",
+        "hiring",
+        "recruiting",
+        "team",
+        "life",
+    },
+)
+
+
+def _url_path_is_careers_hub_only(url: str) -> bool:
+    """True, если путь — один сегмент из хабов (/careers) без slug роли."""
+    try:
+        path = (urlparse(url).path or "/").strip()
+    except Exception:
+        return False
+    p = path.rstrip("/")
+    if not p or p == "/":
+        return True
+    parts = [x for x in p.lower().split("/") if x]
+    if len(parts) != 1:
+        return False
+    return parts[0] in _CAREERS_HUB_SEGMENTS
 
 
 def _today_str() -> str:
@@ -443,7 +479,8 @@ def _write_crawl_report(base: Path, counters: dict, job_id: str) -> Path | None:
             lines.append(
                 f"- **{tier}**: attempted={st.get('attempted', 0)} "
                 f"inserted={st.get('inserted', 0)} dup={st.get('duplicates', 0)} "
-                f"err={st.get('errors', 0)}\n",
+                f"err={st.get('errors', 0)} "
+                f"skip_hub={st.get('skipped_hub_fallback', 0)}\n",
             )
     else:
         lines.append("_нет данных_\n")
@@ -467,7 +504,13 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
     ldjson_listings_seen = 0
     delay = float(os.environ.get("CRAWL_DELAY_SEC", "1.0"))
     tier_stats: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"attempted": 0, "inserted": 0, "duplicates": 0, "errors": 0},
+        lambda: {
+            "attempted": 0,
+            "inserted": 0,
+            "duplicates": 0,
+            "errors": 0,
+            "skipped_hub_fallback": 0,
+        },
     )
     max_age = _listing_max_age_days()
     cutoff = datetime.now(timezone.utc) - timedelta(days=max_age)
@@ -543,6 +586,15 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
                         inserted += 1
                         tier_stats[tier]["inserted"] += 1
                         print(f"OK   {job_url} -> id={vid} {company!r} / {role_title!r}")
+                    time.sleep(delay)
+                    continue
+
+                if _url_path_is_careers_hub_only(url):
+                    tier_stats[tier]["skipped_hub_fallback"] += 1
+                    print(
+                        f"SKIP hub (no JobPosting in ld+json; refuse title fallback) {url!r}",
+                        file=sys.stderr,
+                    )
                     time.sleep(delay)
                     continue
 
