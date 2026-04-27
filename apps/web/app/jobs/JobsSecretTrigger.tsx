@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { enqueueFullSearchFromSecret } from "./actions";
 
 /**
- * Invisible 8×8 launch hit area — parent should position (e.g. fixed bottom-right in shell).
+ * Launch hit area — parent задаёт размер (сейчас 18×18 px, временно видимый фон в shell).
  */
 export function JobsSecretTrigger() {
   const [pending, start] = useTransition();
