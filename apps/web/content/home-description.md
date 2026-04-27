@@ -1,6 +1,3 @@
-> Source of truth in repo: `docs/Описание на главной.md` — keep in sync (this file is bundled with the web app).
-
-Русская версия
 # Prometei — живой сервис для поиска и “упаковки” вакансий
 
 **Prometei** — это мой петпроект, который автоматизирует самый скучный и дорогой кусок job search: сбор вакансий из десятков источников → дедупликацию → скоринг по правилам → подготовку материалов для отклика. Цель простая: *меньше мусора, больше точных попаданий и готовых текстов, чтобы отклик занимал минуты, а не часы.*
@@ -35,7 +32,6 @@
 
 
 ----------------------------------------
-English version
 # Prometei — a real job search pipeline service
 
 **Prometei** is my pet-project that automates the most boring and expensive part of job search: collecting vacancies from dozens of sources → deduplication → rule-based scoring → preparing outreach materials. The goal is simple: *less noise, more precise matches, and ready-to-send texts — so applying takes minutes, not hours.*
