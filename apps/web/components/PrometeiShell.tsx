@@ -13,15 +13,23 @@ const pillActive =
 export function PrometeiShell({
   active,
   headerRight,
+  fixedBottomRight,
   children,
 }: {
   active: PrometeiNav;
   headerRight?: ReactNode;
+  /** e.g. secret launch hit area over the bottom-right mascot */
+  fixedBottomRight?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-[#FFFDE7] via-[#FFF9C4] to-[#FFECB3] dark:from-neutral-950 dark:via-[#291c0e] dark:to-neutral-950">
       <PikachuPeek />
+      {fixedBottomRight ? (
+        <div className="pointer-events-auto fixed bottom-2 right-2 z-20 h-8 w-8 sm:bottom-3 sm:right-3">
+          {fixedBottomRight}
+        </div>
+      ) : null}
       <div className="relative z-10 mx-auto max-w-3xl px-4 py-10">
         <div className="relative mb-8 flex flex-wrap items-center justify-between gap-4">
           <nav className="flex flex-wrap gap-4 text-sm font-medium text-neutral-800 dark:text-amber-100/90">

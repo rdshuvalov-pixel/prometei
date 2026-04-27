@@ -47,7 +47,7 @@ export default async function JobsPage() {
   }
 
   return (
-    <PrometeiShell active="jobs" headerRight={<JobsSecretTrigger />}>
+    <PrometeiShell active="jobs" fixedBottomRight={<JobsSecretTrigger />}>
       <h1 className="mb-2 text-2xl font-black tracking-tight text-neutral-900 dark:text-amber-50">
         Run history
       </h1>
