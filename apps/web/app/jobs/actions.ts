@@ -13,10 +13,7 @@ function utcDay(): string {
 
 export type SecretEnqueueState = { ok: boolean; message: string };
 
-/**
- * Скрытый запуск: три задачи в очередь (crawl + tier4 boards + ashby).
- * Не чаще MAX_RUNS_PER_UTC_DAY раз за календарный день UTC (cookie).
- */
+/** Hidden full run: three jobs (crawl + tier4 boards + ashby). Rate-limited by UTC day (cookie). */
 export async function enqueueFullSearchFromSecret(): Promise<SecretEnqueueState> {
   try {
     const jar = await cookies();
@@ -27,7 +24,7 @@ export async function enqueueFullSearchFromSecret(): Promise<SecretEnqueueState>
     if (usedToday >= MAX_RUNS_PER_UTC_DAY) {
       return {
         ok: false,
-        message: `Лимит: не более ${MAX_RUNS_PER_UTC_DAY} полных запусков за сутки (UTC). Попробуй завтра.`,
+        message: `Limit: at most ${MAX_RUNS_PER_UTC_DAY} full runs per UTC calendar day. Try again tomorrow.`,
       };
     }
 
@@ -57,7 +54,7 @@ export async function enqueueFullSearchFromSecret(): Promise<SecretEnqueueState>
     revalidatePath("/");
     return {
       ok: true,
-      message: `В очереди: ${types.join(", ")}.`,
+      message: `Queued: ${types.join(", ")}.`,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

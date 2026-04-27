@@ -20,7 +20,7 @@ function formatJson(value: unknown, max = 600): string {
 function formatTs(value: unknown): string {
   if (value == null || value === "") return "—";
   const d = new Date(String(value));
-  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString("ru-RU");
+  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString("en-US");
 }
 
 export default async function JobsPage() {
@@ -49,53 +49,28 @@ export default async function JobsPage() {
   return (
     <PrometeiShell active="jobs" headerRight={<JobsSecretTrigger />}>
       <h1 className="mb-2 text-2xl font-black tracking-tight text-neutral-900 dark:text-amber-50">
-        История прогонов
+        Run history
       </h1>
       <p className="mb-4 text-sm font-medium text-neutral-800 dark:text-amber-100/80">
-        Таблица{" "}
-        <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
-          job_runs
-        </code>
-        :{" "}
-        <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
-          queued
-        </code>{" "}
-        забирает воркер. При{" "}
-        <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
-          failed
-        </code>{" "}
-        смотри блок <strong>Ошибка</strong> и{" "}
-        <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
-          log
-        </code>
-        ; на VPS:{" "}
-        <code className="rounded-md border border-neutral-800 bg-yellow-200/80 px-1.5 py-0.5 font-mono text-neutral-900 dark:border-amber-300/50 dark:bg-yellow-500/20 dark:text-amber-50">
-          docker compose -f docker-compose.worker.yml logs --tail=200 worker
-        </code>
-        .
+        The worker picks up jobs in <strong>queued</strong> state. On <strong>failed</strong>, open
+        the <strong>Error</strong> block and the <strong>log</strong> details. For the Docker worker,
+        check container logs on your server (e.g. <code className="font-mono">docker compose logs</code>{" "}
+        for the worker service).
       </p>
 
       <section className="mb-8 rounded-2xl border-4 border-neutral-900 bg-white/90 p-4 text-sm font-medium text-neutral-800 shadow-[4px_4px_0_0_#171717] dark:bg-neutral-900/80 dark:text-amber-100/85 dark:shadow-[4px_4px_0_0_#fbbf24]">
-        <p className="font-black text-neutral-900 dark:text-amber-50">
-          Постановка в очередь
-        </p>
+        <p className="font-black text-neutral-900 dark:text-amber-50">Enqueue jobs</p>
         <p className="mt-2">
           <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">
             POST /api/jobs
           </code>{" "}
-          с телом{" "}
+          with JSON body such as{" "}
           <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">
             {`{"job_type":"script_crawl"}`}
           </code>{" "}
-          или другим{" "}
-          <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">
-            job_type
-          </code>
-          . Если в Vercel задан{" "}
-          <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">
-            ENQUEUE_SECRET
-          </code>
-          , добавь заголовок{" "}
+          or another <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">job_type</code>.
+          If <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">ENQUEUE_SECRET</code>{" "}
+          is set on Vercel, send header{" "}
           <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">
             Authorization: Bearer …
           </code>
@@ -105,21 +80,19 @@ export default async function JobsPage() {
 
       {loadError ? (
         <div className="rounded-2xl border-4 border-amber-600 bg-amber-100 p-4 text-sm font-bold text-amber-950 dark:border-amber-400 dark:bg-amber-950/50 dark:text-amber-100">
-          <p>Ошибка загрузки</p>
+          <p>Load error</p>
           <p className="mt-1 whitespace-pre-wrap">{loadError}</p>
           <p className="mt-2 text-xs font-medium opacity-90">
-            Если таблицы ещё нет — создай миграцию{" "}
-            <code className="rounded bg-amber-200/80 px-1 dark:bg-amber-900/50">job_runs</code> в
-            Supabase и redeploy.
+            If the table is missing, create it in Supabase and redeploy the app.
           </p>
         </div>
       ) : jobs.length === 0 ? (
         <p className="text-sm font-medium text-neutral-700 dark:text-amber-200/80">
-          Пока нет строк. Поставь задачу через{" "}
+          No rows yet. Enqueue via{" "}
           <code className="rounded border border-neutral-800 bg-yellow-200/70 px-1 font-mono dark:bg-yellow-500/15">
             POST /api/jobs
           </code>{" "}
-          (cron или вручную).
+          (cron or manual).
         </p>
       ) : (
         <ul className="space-y-4">
@@ -173,11 +146,11 @@ export default async function JobsPage() {
                 </div>
                 <dl className="mt-2 grid gap-1 text-xs font-medium text-neutral-800 dark:text-amber-100/75">
                   <div className="flex flex-wrap gap-x-2">
-                    <dt className="text-neutral-600 dark:text-amber-200/60">Создан</dt>
+                    <dt className="text-neutral-600 dark:text-amber-200/60">Created</dt>
                     <dd>{created}</dd>
                   </div>
                   <div className="flex flex-wrap gap-x-2">
-                    <dt className="text-neutral-600 dark:text-amber-200/60">Старт / финиш</dt>
+                    <dt className="text-neutral-600 dark:text-amber-200/60">Start → finish</dt>
                     <dd>
                       {started} → {finished}
                     </dd>
@@ -185,9 +158,7 @@ export default async function JobsPage() {
                 </dl>
                 {err && (
                   <div className="mt-3 rounded-xl border-2 border-rose-700 bg-white p-3 dark:border-rose-400 dark:bg-rose-950/40">
-                    <p className="text-xs font-black text-rose-900 dark:text-rose-100">
-                      Ошибка (поле error)
-                    </p>
+                    <p className="text-xs font-black text-rose-900 dark:text-rose-100">Error field</p>
                     <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-rose-950 dark:text-rose-100">
                       {err.length > 12000 ? `${err.slice(0, 12000)}…` : err}
                     </pre>
@@ -216,7 +187,7 @@ export default async function JobsPage() {
                 {log != null && String(log).trim() !== "" && (
                   <details className="mt-2" open={failed}>
                     <summary className="cursor-pointer text-xs font-bold text-neutral-800 dark:text-amber-100">
-                      log (фрагмент){failed ? " — раскрыто при failed" : ""}
+                      log (excerpt){failed ? " — expanded on failed" : ""}
                     </summary>
                     <pre className="mt-2 max-h-64 overflow-auto rounded-lg border-2 border-neutral-900/20 bg-yellow-50/80 p-2 font-mono text-[11px] text-neutral-900 dark:border-amber-200/30 dark:bg-neutral-950 dark:text-amber-100">
                       {String(log).slice(0, failed ? 4000 : 1200)}

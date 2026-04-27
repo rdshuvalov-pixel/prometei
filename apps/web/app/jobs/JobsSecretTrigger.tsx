@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { enqueueFullSearchFromSecret } from "./actions";
 
-/** Невидимая зона: правый верх страницы «Прогоны». */
+/** Invisible hit target: top-right on Runs page. */
 export function JobsSecretTrigger() {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
