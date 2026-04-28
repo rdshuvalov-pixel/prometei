@@ -186,28 +186,23 @@ def _log_candidate_and_decision(
     inserted_vacancy_id: int | None = None,
 ) -> None:
     try:
-        ins = (
-            sb.table("vacancy_candidates")
-            .insert(
-                {
-                    "search_id": search_id,
-                    "source": "tier4_ashby",
-                    "tier": "4",
-                    "platform": "jobs.ashbyhq.com",
-                    "external_url": external_url[:2000],
-                    "company": company[:500],
-                    "role_title": role_title[:500],
-                    "published_at": raw.get("published_at"),
-                    "fingerprint": _fingerprint(company, role_title, external_url),
-                    "raw": raw or {},
-                },
-            )
-            .select("id")
-            .single()
-            .execute()
-        )
-        row = getattr(ins, "data", None) or {}
-        cid = row.get("id")
+        ins = sb.table("vacancy_candidates").insert(
+            {
+                "search_id": search_id,
+                "source": "tier4_ashby",
+                "tier": "4",
+                "platform": "jobs.ashbyhq.com",
+                "external_url": external_url[:2000],
+                "company": company[:500],
+                "role_title": role_title[:500],
+                "published_at": raw.get("published_at"),
+                "fingerprint": _fingerprint(company, role_title, external_url),
+                "raw": raw or {},
+            },
+        ).execute()
+        data = getattr(ins, "data", None)
+        row = data[0] if isinstance(data, list) and data else (data or {})
+        cid = (row or {}).get("id")
         if not cid:
             return
         sb.table("vacancy_ingest_decisions").insert(
@@ -220,7 +215,8 @@ def _log_candidate_and_decision(
                 "meta": {},
             },
         ).execute()
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        print(f"WARN funnel log failed: {e}", file=sys.stderr)
         return
 
 def _today_str() -> str:
