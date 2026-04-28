@@ -19,6 +19,7 @@ TIER4_MAX_JOB_AGE_DAYS (по умолчанию 5); BOARD_FEED_DELAY_SEC (по �
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -54,6 +55,114 @@ def _client() -> Client:
 def _norm_key(s: str) -> str:
     return " ".join(s.lower().strip().split())
 
+
+def _search_id() -> str:
+    return (os.environ.get("SEARCH_ID") or "").strip()
+
+
+def _fingerprint(*parts: str) -> str:
+    s = "|".join(p.strip().lower() for p in parts if p is not None)
+    return hashlib.sha1(s.encode("utf-8"), usedforsecurity=False).hexdigest()  # noqa: S324
+
+
+def _vacancy_source_exists(sb: Client, platform: str, url: str) -> bool:
+    try:
+        res = (
+            sb.table("vacancy_sources")
+            .select("id")
+            .eq("platform", platform[:255])
+            .eq("url", url[:2000])
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        return len(rows) > 0
+    except Exception:
+        return False
+
+
+def _log_target(
+    sb: Client,
+    *,
+    search_id: str,
+    source: str,
+    platform: str,
+    url: str,
+    http_status: int | None,
+    latency_ms: int | None,
+    outcome: str,
+    error: str | None = None,
+    meta: dict | None = None,
+) -> None:
+    try:
+        sb.table("search_targets_log").insert(
+            {
+                "search_id": search_id,
+                "source": source,
+                "tier": "4",
+                "platform": platform[:255] if platform else None,
+                "url": url[:2000],
+                "http_status": http_status,
+                "latency_ms": latency_ms,
+                "outcome": outcome[:64],
+                "error": error,
+                "meta": meta or {},
+            },
+        ).execute()
+    except Exception:
+        return
+
+
+def _log_candidate_and_decision(
+    sb: Client,
+    *,
+    search_id: str,
+    external_url: str,
+    company: str | None,
+    role_title: str | None,
+    platform: str,
+    raw: dict,
+    decision: str,
+    reason: str | None = None,
+    inserted_vacancy_id: int | None = None,
+) -> None:
+    try:
+        ins = (
+            sb.table("vacancy_candidates")
+            .insert(
+                {
+                    "search_id": search_id,
+                    "source": "tier4_board_feeds",
+                    "tier": "4",
+                    "platform": platform[:255] if platform else None,
+                    "external_url": external_url[:2000],
+                    "company": company[:500] if company else None,
+                    "role_title": role_title[:500] if role_title else None,
+                    "published_at": None,
+                    "fingerprint": _fingerprint(company or "", role_title or "", external_url),
+                    "raw": raw or {},
+                },
+            )
+            .select("id")
+            .single()
+            .execute()
+        )
+        row = getattr(ins, "data", None) or {}
+        cid = row.get("id")
+        if not cid:
+            return
+        sb.table("vacancy_ingest_decisions").insert(
+            {
+                "search_id": search_id,
+                "candidate_id": cid,
+                "decision": decision,
+                "reason": reason,
+                "inserted_vacancy_id": inserted_vacancy_id,
+                "meta": {},
+            },
+        ).execute()
+    except Exception:
+        return
 
 def _today_str() -> str:
     return date.today().isoformat()
@@ -221,6 +330,8 @@ def _try_insert(
     key = (_norm_key(company), _norm_key(role_title))
     if key in dedup:
         return "dup"
+    if _vacancy_source_exists(sb, platform, job_url):
+        return "dup_url"
     row = {
         "created_at": _today_str(),
         "company": company[:500],
@@ -239,9 +350,12 @@ def _try_insert(
         if not ins_rows:
             return "err"
         vid = ins_rows[0]["id"]
-        sb.table("vacancy_sources").insert(
-            {"vacancy_id": vid, "platform": platform[:255], "url": job_url[:2000]},
-        ).execute()
+        try:
+            sb.table("vacancy_sources").insert(
+                {"vacancy_id": vid, "platform": platform[:255], "url": job_url[:2000]},
+            ).execute()
+        except Exception:
+            pass
         dedup.add(key)
         return "ok"
     except Exception as e:  # noqa: BLE001
@@ -255,6 +369,8 @@ def main() -> None:
     t4q = tier4_query.load_tier4_query(base)
     cutoff = datetime.now(timezone.utc) - timedelta(days=_max_age_days())
     delay = _delay()
+    sid = _search_id()
+    search_source = (os.environ.get("SEARCH_SOURCE") or "").strip() or "full_search"
 
     gh_tokens = _split_env_list("GREENHOUSE_BOARD_TOKENS")
     lever_slugs = _split_env_list("LEVER_COMPANIES")
@@ -296,11 +412,38 @@ def main() -> None:
         for token in gh_tokens:
             api = f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs"
             try:
+                t0 = time.time()
                 r = client.get(api)
+                latency_ms = int((time.time() - t0) * 1000)
                 r.raise_for_status()
                 data = r.json()
+                if sid:
+                    _log_target(
+                        sb,
+                        search_id=sid,
+                        source=search_source,
+                        platform="greenhouse",
+                        url=api,
+                        http_status=int(r.status_code),
+                        latency_ms=latency_ms,
+                        outcome="fetched_ok",
+                        meta={"board_token": token},
+                    )
             except Exception as e:  # noqa: BLE001
                 errors += 1
+                if sid:
+                    _log_target(
+                        sb,
+                        search_id=sid,
+                        source=search_source,
+                        platform="greenhouse",
+                        url=api,
+                        http_status=None,
+                        latency_ms=None,
+                        outcome="http_error",
+                        error=str(e),
+                        meta={"board_token": token},
+                    )
                 print(f"ERR greenhouse {token!r} :: {e}", file=sys.stderr)
                 time.sleep(delay)
                 continue
@@ -353,22 +496,84 @@ def main() -> None:
                 )
                 if st == "ok":
                     inserted += 1
+                    if sid:
+                        _log_candidate_and_decision(
+                            sb,
+                            search_id=sid,
+                            external_url=url,
+                            company=company,
+                            role_title=title,
+                            platform="greenhouse.io",
+                            raw={"details": details},
+                            decision="insert",
+                        )
                     if len(preview) < 25:
                         preview.append(f"[GH {token}] {title}")
-                elif st == "dup":
+                elif st in ("dup", "dup_url"):
                     duplicates += 1
+                    if sid:
+                        _log_candidate_and_decision(
+                            sb,
+                            search_id=sid,
+                            external_url=url,
+                            company=company,
+                            role_title=title,
+                            platform="greenhouse.io",
+                            raw={"details": details},
+                            decision="skip_duplicate",
+                            reason=st,
+                        )
                 else:
                     errors += 1
+                    if sid:
+                        _log_candidate_and_decision(
+                            sb,
+                            search_id=sid,
+                            external_url=url,
+                            company=company,
+                            role_title=title,
+                            platform="greenhouse.io",
+                            raw={"details": details},
+                            decision="skip_error",
+                            reason="insert_error",
+                        )
             time.sleep(delay)
 
         for slug in lever_slugs:
             api = f"https://api.lever.co/v0/postings/{slug}?mode=json"
             try:
+                t0 = time.time()
                 r = client.get(api)
+                latency_ms = int((time.time() - t0) * 1000)
                 r.raise_for_status()
                 data = r.json()
+                if sid:
+                    _log_target(
+                        sb,
+                        search_id=sid,
+                        source=search_source,
+                        platform="lever",
+                        url=api,
+                        http_status=int(r.status_code),
+                        latency_ms=latency_ms,
+                        outcome="fetched_ok",
+                        meta={"company": slug},
+                    )
             except Exception as e:  # noqa: BLE001
                 errors += 1
+                if sid:
+                    _log_target(
+                        sb,
+                        search_id=sid,
+                        source=search_source,
+                        platform="lever",
+                        url=api,
+                        http_status=None,
+                        latency_ms=None,
+                        outcome="http_error",
+                        error=str(e),
+                        meta={"company": slug},
+                    )
                 print(f"ERR lever {slug!r} :: {e}", file=sys.stderr)
                 time.sleep(delay)
                 continue
@@ -417,12 +622,47 @@ def main() -> None:
                 )
                 if st == "ok":
                     inserted += 1
+                    if sid:
+                        _log_candidate_and_decision(
+                            sb,
+                            search_id=sid,
+                            external_url=url,
+                            company=company,
+                            role_title=title,
+                            platform="jobs.lever.co",
+                            raw={"details": details},
+                            decision="insert",
+                        )
                     if len(preview) < 25:
                         preview.append(f"[LV {slug}] {title}")
-                elif st == "dup":
+                elif st in ("dup", "dup_url"):
                     duplicates += 1
+                    if sid:
+                        _log_candidate_and_decision(
+                            sb,
+                            search_id=sid,
+                            external_url=url,
+                            company=company,
+                            role_title=title,
+                            platform="jobs.lever.co",
+                            raw={"details": details},
+                            decision="skip_duplicate",
+                            reason=st,
+                        )
                 else:
                     errors += 1
+                    if sid:
+                        _log_candidate_and_decision(
+                            sb,
+                            search_id=sid,
+                            external_url=url,
+                            company=company,
+                            role_title=title,
+                            platform="jobs.lever.co",
+                            raw={"details": details},
+                            decision="skip_error",
+                            reason="insert_error",
+                        )
             time.sleep(delay)
 
         for slug in workable_slugs:
