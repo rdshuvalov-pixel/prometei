@@ -148,28 +148,23 @@ def _log_candidate_and_decision(
     inserted_vacancy_id: int | None = None,
 ) -> None:
     try:
-        ins = (
-            sb.table("vacancy_candidates")
-            .insert(
-                {
-                    "search_id": search_id,
-                    "source": source,
-                    "tier": tier[:64] if tier else None,
-                    "platform": platform[:255] if platform else None,
-                    "external_url": external_url[:2000],
-                    "company": company[:500] if company else None,
-                    "role_title": role_title[:500] if role_title else None,
-                    "published_at": published_at,
-                    "fingerprint": fingerprint,
-                    "raw": raw or {},
-                },
-            )
-            .select("id")
-            .single()
-            .execute()
-        )
-        row = getattr(ins, "data", None) or {}
-        cid = row.get("id")
+        ins = sb.table("vacancy_candidates").insert(
+            {
+                "search_id": search_id,
+                "source": source,
+                "tier": tier[:64] if tier else None,
+                "platform": platform[:255] if platform else None,
+                "external_url": external_url[:2000],
+                "company": company[:500] if company else None,
+                "role_title": role_title[:500] if role_title else None,
+                "published_at": published_at,
+                "fingerprint": fingerprint,
+                "raw": raw or {},
+            },
+        ).execute()
+        data = getattr(ins, "data", None)
+        row = data[0] if isinstance(data, list) and data else (data or {})
+        cid = (row or {}).get("id")
         if not cid:
             return
         sb.table("vacancy_ingest_decisions").insert(
@@ -183,7 +178,8 @@ def _log_candidate_and_decision(
                 "meta": {},
             },
         ).execute()
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        print(f"WARN funnel log failed: {e}", file=sys.stderr)
         return
 
 def _load_dedup_pairs(sb: Client, limit_rows: int = 15000) -> set[tuple[str, str]]:

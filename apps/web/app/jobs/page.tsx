@@ -86,14 +86,15 @@ export default async function JobsPage() {
         <section className="mb-10 rounded-2xl border-4 border-neutral-900 bg-white/90 p-4 text-sm font-medium text-neutral-800 shadow-[4px_4px_0_0_#171717] dark:bg-neutral-900/80 dark:text-amber-100/85 dark:shadow-[4px_4px_0_0_#fbbf24]">
           <p className="font-black text-neutral-900 dark:text-amber-50">Search funnel (latest)</p>
           <p className="mt-1 text-xs opacity-90">
-            One run = targets visited → candidates extracted → inserted/skipped decisions.
+            One run = target pool → attempted → candidates → inserted/skipped decisions.
           </p>
           <ul className="mt-3 space-y-2">
             {funnelRows.map((r, idx) => {
               const id = String(r.search_id ?? `search-${idx}`);
               const status = String(r.status ?? "—");
               const created = formatTs(r.created_at);
-              const targets = String(r.targets_total ?? "0");
+              const pool = String(r.targets_pool_total ?? "0");
+              const attempted = String(r.targets_attempted_total ?? "0");
               const ok = String(r.targets_fetched_ok ?? "0");
               const cand = String(r.candidates_total ?? "0");
               const ins = String(r.inserted ?? "0");
@@ -108,7 +109,8 @@ export default async function JobsPage() {
                     <p className="text-xs font-black">{status}</p>
                   </div>
                   <p className="mt-2 text-xs">
-                    targets: <strong>{targets}</strong> (ok {ok}) · candidates: <strong>{cand}</strong> · inserted:{" "}
+                    pool: <strong>{pool}</strong> · attempted: <strong>{attempted}</strong> (ok {ok}) · candidates:{" "}
+                    <strong>{cand}</strong> · inserted:{" "}
                     <strong>{ins}</strong> · skipped: <strong>{skip}</strong>
                   </p>
                 </li>
