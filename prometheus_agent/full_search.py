@@ -94,22 +94,17 @@ def _ensure_search_run(sb: Client, *, job_run_id: str, source: str | None) -> st
     if pid:
         return pid
     # 3) create new row
-    ins = (
-        sb.table("search_runs")
-        .insert(
-            {
-                "status": "running",
-                "source": source,
-                "job_run_id": job_run_id,
-                "params": {"created_by": "full_search"},
-            },
-        )
-        .select("id")
-        .single()
-        .execute()
-    )
-    row = getattr(ins, "data", None) or {}
-    sid = str(row.get("id") or "").strip()
+    ins = sb.table("search_runs").insert(
+        {
+            "status": "running",
+            "source": source,
+            "job_run_id": job_run_id,
+            "params": {"created_by": "full_search"},
+        },
+    ).execute()
+    data = getattr(ins, "data", None)
+    row = data[0] if isinstance(data, list) and data else (data or {})
+    sid = str((row or {}).get("id") or "").strip()
     if not sid:
         raise RuntimeError("failed to create search_runs row")
     return sid
@@ -123,15 +118,12 @@ def _search_status(sb: Client, search_id: str, status: str, error: str | None = 
 
 
 def _step_start(sb: Client, *, search_id: str, step: str, substep: str) -> str:
-    res = (
-        sb.table("search_steps")
-        .insert({"search_id": search_id, "step": step, "substep": substep, "status": "running"})
-        .select("id")
-        .single()
-        .execute()
-    )
-    row = getattr(res, "data", None) or {}
-    sid = str(row.get("id") or "").strip()
+    res = sb.table("search_steps").insert(
+        {"search_id": search_id, "step": step, "substep": substep, "status": "running"},
+    ).execute()
+    data = getattr(res, "data", None)
+    row = data[0] if isinstance(data, list) and data else (data or {})
+    sid = str((row or {}).get("id") or "").strip()
     if not sid:
         raise RuntimeError("failed to create search_steps row")
     return sid
