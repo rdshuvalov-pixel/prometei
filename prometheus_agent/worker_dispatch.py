@@ -21,6 +21,8 @@ def main() -> int:
     job_type = (os.environ.get("JOB_TYPE") or "script_crawl").strip().lower()
     base = Path(__file__).resolve().parent
     py = sys.executable
+    if job_type in ("full_search", "fullrun", "search"):
+        script = base / "full_search.py"
     if job_type in ("tier4_ashby", "ashby_tier4", "ashby"):
         script = base / "ashby_crawler.py"
     elif job_type in ("tier4_board_feeds", "tier4_greenhouse_lever", "board_feeds"):

@@ -13,7 +13,7 @@ function utcDay(): string {
 
 export type SecretEnqueueState = { ok: boolean; message: string };
 
-/** Hidden full run: three jobs (crawl + tier4 boards + ashby). Rate-limited by UTC day (cookie). */
+/** Hidden full run: one sequential funnel job. Rate-limited by UTC day (cookie). */
 export async function enqueueFullSearchFromSecret(): Promise<SecretEnqueueState> {
   try {
     const jar = await cookies();
@@ -29,18 +29,26 @@ export async function enqueueFullSearchFromSecret(): Promise<SecretEnqueueState>
     }
 
     const sb = getSupabaseAdmin();
-    const types = ["script_crawl", "tier4_board_feeds", "tier4_ashby"] as const;
-    for (const job_type of types) {
-      const { error } = await sb.from("job_runs").insert({
+    const { data: searchRow, error: searchErr } = await sb
+      .from("search_runs")
+      .insert({
         status: "queued",
-        job_type,
-        counters: {},
-        payload: { job_type, source: "jobs_secret_ui" },
-      });
-      if (error) {
-        return { ok: false, message: error.message };
-      }
-    }
+        source: "jobs_secret_ui",
+        params: { rate_limited_cookie: RUN_COOKIE },
+      })
+      .select("id")
+      .single();
+    if (searchErr) return { ok: false, message: searchErr.message };
+    const search_id = String(searchRow?.id ?? "").trim();
+    if (!search_id) return { ok: false, message: "Failed to create search run." };
+
+    const { error } = await sb.from("job_runs").insert({
+      status: "queued",
+      job_type: "full_search",
+      counters: {},
+      payload: { job_type: "full_search", source: "jobs_secret_ui", search_id },
+    });
+    if (error) return { ok: false, message: error.message };
 
     const next = [...parts, day];
     const trimmed = next.slice(-200);
@@ -54,7 +62,7 @@ export async function enqueueFullSearchFromSecret(): Promise<SecretEnqueueState>
     revalidatePath("/");
     return {
       ok: true,
-      message: `Queued: ${types.join(", ")}.`,
+      message: `Queued: full_search (search_id=${search_id}).`,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

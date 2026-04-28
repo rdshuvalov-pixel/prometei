@@ -21,6 +21,7 @@ LISTING_MAX_AGE_DAYS (по умолчанию 5) не вставляем; без
 from __future__ import annotations
 
 import html as html_lib
+import hashlib
 import json
 import os
 import re
@@ -69,6 +70,121 @@ def _count_head(sb: Client, table: str) -> int | None:
 def _norm_key(s: str) -> str:
     return " ".join(s.lower().strip().split())
 
+
+def _search_id() -> str:
+    return (os.environ.get("SEARCH_ID") or "").strip()
+
+
+def _fingerprint(*parts: str) -> str:
+    s = "|".join(p.strip().lower() for p in parts if p is not None)
+    return hashlib.sha1(s.encode("utf-8"), usedforsecurity=False).hexdigest()  # noqa: S324
+
+
+def _vacancy_source_exists(sb: Client, platform: str, url: str) -> bool:
+    try:
+        res = (
+            sb.table("vacancy_sources")
+            .select("id")
+            .eq("platform", platform[:255])
+            .eq("url", url[:2000])
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        return len(rows) > 0
+    except Exception:
+        return False
+
+
+def _log_target(
+    sb: Client,
+    *,
+    search_id: str,
+    source: str,
+    tier: str,
+    platform: str,
+    url: str,
+    http_status: int | None,
+    latency_ms: int | None,
+    outcome: str,
+    error: str | None = None,
+    meta: dict | None = None,
+) -> None:
+    try:
+        sb.table("search_targets_log").insert(
+            {
+                "search_id": search_id,
+                "source": source,
+                "tier": tier[:64] if tier else None,
+                "platform": platform[:255] if platform else None,
+                "url": url[:2000],
+                "http_status": http_status,
+                "latency_ms": latency_ms,
+                "outcome": outcome[:64],
+                "error": (error or None),
+                "meta": meta or {},
+            },
+        ).execute()
+    except Exception:
+        return
+
+
+def _log_candidate_and_decision(
+    sb: Client,
+    *,
+    search_id: str,
+    source: str,
+    tier: str,
+    platform: str,
+    external_url: str,
+    company: str | None,
+    role_title: str | None,
+    published_at: str | None,
+    fingerprint: str | None,
+    raw: dict,
+    decision: str,
+    reason: str | None = None,
+    matched_existing_vacancy_id: int | None = None,
+    inserted_vacancy_id: int | None = None,
+) -> None:
+    try:
+        ins = (
+            sb.table("vacancy_candidates")
+            .insert(
+                {
+                    "search_id": search_id,
+                    "source": source,
+                    "tier": tier[:64] if tier else None,
+                    "platform": platform[:255] if platform else None,
+                    "external_url": external_url[:2000],
+                    "company": company[:500] if company else None,
+                    "role_title": role_title[:500] if role_title else None,
+                    "published_at": published_at,
+                    "fingerprint": fingerprint,
+                    "raw": raw or {},
+                },
+            )
+            .select("id")
+            .single()
+            .execute()
+        )
+        row = getattr(ins, "data", None) or {}
+        cid = row.get("id")
+        if not cid:
+            return
+        sb.table("vacancy_ingest_decisions").insert(
+            {
+                "search_id": search_id,
+                "candidate_id": cid,
+                "decision": decision,
+                "reason": reason,
+                "matched_existing_vacancy_id": matched_existing_vacancy_id,
+                "inserted_vacancy_id": inserted_vacancy_id,
+                "meta": {},
+            },
+        ).execute()
+    except Exception:
+        return
 
 def _load_dedup_pairs(sb: Client, limit_rows: int = 15000) -> set[tuple[str, str]]:
     pairs: set[tuple[str, str]] = set()
@@ -520,14 +636,31 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
         "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
     }
 
+    sid = _search_id()
+    search_source = (os.environ.get("SEARCH_SOURCE") or "").strip() or "full_search"
+
     with httpx.Client(timeout=25.0, follow_redirects=True, headers=headers) as client:
         for url, tier in urls:
             tier_stats[tier]["attempted"] += 1
             netloc = urlparse(url).netloc or "unknown"
             try:
+                t0 = time.time()
                 r = client.get(url)
+                latency_ms = int((time.time() - t0) * 1000)
                 r.raise_for_status()
                 fetched_at = datetime.now(timezone.utc).isoformat()
+                if sid:
+                    _log_target(
+                        sb,
+                        search_id=sid,
+                        source=search_source,
+                        tier=tier,
+                        platform=netloc,
+                        url=url,
+                        http_status=int(r.status_code),
+                        latency_ms=latency_ms,
+                        outcome="fetched_ok",
+                    )
                 listing_rows, skipped_stale = _jobposting_rows_from_html(
                     r.text,
                     url,
@@ -552,7 +685,45 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
                         if key in dedup:
                             duplicates += 1
                             tier_stats[tier]["duplicates"] += 1
+                            if sid:
+                                _log_candidate_and_decision(
+                                    sb,
+                                    search_id=sid,
+                                    source="script_crawl",
+                                    tier=tier,
+                                    platform=netloc,
+                                    external_url=job_url,
+                                    company=company,
+                                    role_title=role_title,
+                                    published_at=None,
+                                    fingerprint=_fingerprint(company, role_title, job_url),
+                                    raw={"details": details, "reason": "dup_company_role"},
+                                    decision="skip_duplicate",
+                                    reason="dup_company_role",
+                                )
                             print(f"DUP  {job_url} -> {company!r} / {role_title!r}")
+                            continue
+
+                        if _vacancy_source_exists(sb, netloc, job_url):
+                            duplicates += 1
+                            tier_stats[tier]["duplicates"] += 1
+                            if sid:
+                                _log_candidate_and_decision(
+                                    sb,
+                                    search_id=sid,
+                                    source="script_crawl",
+                                    tier=tier,
+                                    platform=netloc,
+                                    external_url=job_url,
+                                    company=company,
+                                    role_title=role_title,
+                                    published_at=None,
+                                    fingerprint=_fingerprint(company, role_title, job_url),
+                                    raw={"details": details, "reason": "dup_platform_url"},
+                                    decision="skip_duplicate",
+                                    reason="dup_platform_url",
+                                )
+                            print(f"DUP(url) {job_url} -> {company!r} / {role_title!r}")
                             continue
 
                         row = {
@@ -575,22 +746,57 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
                             print(f"ERR insert empty {job_url}", file=sys.stderr)
                             continue
                         vid = ins_rows[0]["id"]
-                        sb.table("vacancy_sources").insert(
-                            {
-                                "vacancy_id": vid,
-                                "platform": netloc[:255],
-                                "url": job_url[:2000],
-                            },
-                        ).execute()
+                        try:
+                            sb.table("vacancy_sources").insert(
+                                {
+                                    "vacancy_id": vid,
+                                    "platform": netloc[:255],
+                                    "url": job_url[:2000],
+                                },
+                            ).execute()
+                        except Exception:
+                            pass
                         dedup.add(key)
                         inserted += 1
                         tier_stats[tier]["inserted"] += 1
+                        if sid:
+                            _log_candidate_and_decision(
+                                sb,
+                                search_id=sid,
+                                source="script_crawl",
+                                tier=tier,
+                                platform=netloc,
+                                external_url=job_url,
+                                company=company,
+                                role_title=role_title,
+                                published_at=None,
+                                fingerprint=_fingerprint(company, role_title, job_url),
+                                raw={"details": details},
+                                decision="insert",
+                                inserted_vacancy_id=int(vid),
+                            )
                         print(f"OK   {job_url} -> id={vid} {company!r} / {role_title!r}")
                     time.sleep(delay)
                     continue
 
                 if _url_path_is_careers_hub_only(url):
                     tier_stats[tier]["skipped_hub_fallback"] += 1
+                    if sid:
+                        _log_candidate_and_decision(
+                            sb,
+                            search_id=sid,
+                            source="script_crawl",
+                            tier=tier,
+                            platform=netloc,
+                            external_url=url,
+                            company=None,
+                            role_title=None,
+                            published_at=None,
+                            fingerprint=_fingerprint(netloc, url),
+                            raw={"listing_source": "page_title_fallback_refused_hub"},
+                            decision="skip_hub",
+                            reason="hub_no_ldjson",
+                        )
                     print(
                         f"SKIP hub (no JobPosting in ld+json; refuse title fallback) {url!r}",
                         file=sys.stderr,
@@ -598,67 +804,101 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
                     time.sleep(delay)
                     continue
 
-                title = _extract_title(r.text)
-                if not title:
-                    title = f"fetch:{netloc}"
-                company, role_title = _guess_company_role(title, netloc)
-                key = (_norm_key(company), _norm_key(role_title))
-                if key in dedup:
-                    duplicates += 1
-                    tier_stats[tier]["duplicates"] += 1
-                    print(f"DUP  {url} -> {company!r} / {role_title!r}")
-                    time.sleep(delay)
-                    continue
-
-                row = {
-                    "created_at": _today_str(),
-                    "company": company,
-                    "role_title": role_title,
-                    "platform": netloc[:255],
-                    "tier": tier[:64],
-                    "status": "New",
-                    "score": 0,
-                    "match_status": "pending_score",
-                    "details": json.dumps(
-                        {
-                            "mvp_crawl": True,
-                            "listing_source": "page_title_fallback",
-                            "fetched_at": fetched_at,
-                            "http_status": r.status_code,
-                            "date_unknown": True,
-                            "tier4_query": t4q,
-                            "listing_date_note": (
-                                "⚠️ Дата публикации неизвестна (нет JobPosting в ld+json)"
-                            ),
-                        },
-                        ensure_ascii=False,
-                    ),
-                    "url": url[:2000],
-                }
-                ins = sb.table("vacancies").insert(row).execute()
-                ins_rows = getattr(ins, "data", None) or []
-                if not ins_rows:
-                    errors += 1
-                    tier_stats[tier]["errors"] += 1
-                    print(f"ERR insert empty {url}", file=sys.stderr)
-                    time.sleep(delay)
-                    continue
-                vid = ins_rows[0]["id"]
-                sb.table("vacancy_sources").insert(
-                    {
-                        "vacancy_id": vid,
+                # Для search-run не пишем «псевдо-вакансии» из <title> — только логируем как пропуск.
+                title = _extract_title(r.text) or ""
+                if sid:
+                    _log_candidate_and_decision(
+                        sb,
+                        search_id=sid,
+                        source="script_crawl",
+                        tier=tier,
+                        platform=netloc,
+                        external_url=url,
+                        company=None,
+                        role_title=None,
+                        published_at=None,
+                        fingerprint=_fingerprint(netloc, url),
+                        raw={"listing_source": "page_title_fallback", "title": title[:800]},
+                        decision="skip_no_ldjson",
+                        reason="no_jobposting_ldjson",
+                    )
+                else:
+                    # legacy режим: старое поведение (может засорять). Оставляем для обратной совместимости.
+                    if not title:
+                        title = f"fetch:{netloc}"
+                    company, role_title = _guess_company_role(title, netloc)
+                    key = (_norm_key(company), _norm_key(role_title))
+                    if key in dedup:
+                        duplicates += 1
+                        tier_stats[tier]["duplicates"] += 1
+                        print(f"DUP  {url} -> {company!r} / {role_title!r}")
+                        time.sleep(delay)
+                        continue
+                    row = {
+                        "created_at": _today_str(),
+                        "company": company,
+                        "role_title": role_title,
                         "platform": netloc[:255],
+                        "tier": tier[:64],
+                        "status": "New",
+                        "score": 0,
+                        "match_status": "pending_score",
+                        "details": json.dumps(
+                            {
+                                "mvp_crawl": True,
+                                "listing_source": "page_title_fallback",
+                                "fetched_at": fetched_at,
+                                "http_status": r.status_code,
+                                "date_unknown": True,
+                                "tier4_query": t4q,
+                                "listing_date_note": (
+                                    "⚠️ Дата публикации неизвестна (нет JobPosting в ld+json)"
+                                ),
+                            },
+                            ensure_ascii=False,
+                        ),
                         "url": url[:2000],
-                    },
-                ).execute()
-                dedup.add(key)
-                inserted += 1
-                tier_stats[tier]["inserted"] += 1
-                print(f"OK   {url} -> id={vid} {company!r} / {role_title!r}")
+                    }
+                    ins = sb.table("vacancies").insert(row).execute()
+                    ins_rows = getattr(ins, "data", None) or []
+                    if not ins_rows:
+                        errors += 1
+                        tier_stats[tier]["errors"] += 1
+                        print(f"ERR insert empty {url}", file=sys.stderr)
+                        time.sleep(delay)
+                        continue
+                    vid = ins_rows[0]["id"]
+                    try:
+                        sb.table("vacancy_sources").insert(
+                            {
+                                "vacancy_id": vid,
+                                "platform": netloc[:255],
+                                "url": url[:2000],
+                            },
+                        ).execute()
+                    except Exception:
+                        pass
+                    dedup.add(key)
+                    inserted += 1
+                    tier_stats[tier]["inserted"] += 1
+                    print(f"OK   {url} -> id={vid} {company!r} / {role_title!r}")
             except Exception as e:  # noqa: BLE001
                 errors += 1
                 tier_stats[tier]["errors"] += 1
                 fetch_errors_urls.append(url)
+                if sid:
+                    _log_target(
+                        sb,
+                        search_id=sid,
+                        source=search_source,
+                        tier=tier,
+                        platform=netloc,
+                        url=url,
+                        http_status=None,
+                        latency_ms=None,
+                        outcome="http_error",
+                        error=str(e),
+                    )
                 print(f"ERR  {url} :: {e}", file=sys.stderr)
             time.sleep(delay)
 
