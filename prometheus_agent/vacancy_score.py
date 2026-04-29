@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 vacancy_score:
-  - picks vacancies where pipeline_status = pending_score
+  - picks vacancy_candidates where pipeline_status = pending_score
   - computes deterministic 0..100 score + score_breakdown (jsonb)
   - sets pipeline_status = scored, scored_at
-  - promotes status=Scored when score >= SCORE_PROMOTE_MIN
+  - promotes pipeline_status only; promotion into vacancies is a separate step
 """
 
 from __future__ import annotations
@@ -221,11 +221,14 @@ def main() -> None:
     n = _batch_size()
     min_score = _promote_min()
     force = _force()
+    sid = (os.environ.get("SEARCH_ID") or "").strip()
 
-    q = sb.table("vacancies").select(
-        "id, role_title, company, url, details, pipeline_status, work_format, seniority, salary_min, salary_max",
+    q = sb.table("vacancy_candidates").select(
+        "id, role_title, company, external_url, raw, pipeline_status, work_format, seniority, salary_min, salary_max",
         count="exact",
     )
+    if sid:
+        q = q.eq("search_id", sid)
     if force:
         # Rescore highest-score first (we'll overwrite score + breakdown deterministically).
         q = q.order("score", desc=True)
@@ -246,16 +249,25 @@ def main() -> None:
             skipped += 1
             continue
         try:
-            score, breakdown = _score_row(r)
+            score, breakdown = _score_row(
+                {
+                    "role_title": r.get("role_title"),
+                    "company": r.get("company"),
+                    "url": r.get("external_url"),
+                    "details": _s(r.get("raw")),
+                    "work_format": r.get("work_format"),
+                    "seniority": r.get("seniority"),
+                    "salary_min": r.get("salary_min"),
+                    "salary_max": r.get("salary_max"),
+                },
+            )
             patch: dict = {
                 "score": score,
                 "score_breakdown": breakdown,
                 "scored_at": _utc_iso(),
                 "pipeline_status": "scored",
             }
-            if score >= min_score:
-                patch["status"] = "Scored"
-            up = sb.table("vacancies").update(patch).eq("id", vid)
+            up = sb.table("vacancy_candidates").update(patch).eq("id", vid)
             if not force:
                 up = up.eq("pipeline_status", "pending_score")
             up.execute()
@@ -265,7 +277,7 @@ def main() -> None:
         except Exception as e:  # noqa: BLE001
             errors += 1
             msg = str(e)
-            sb.table("vacancies").update({"notes": f"score_warn: {msg[:200]}"}).eq("id", vid).eq(
+            sb.table("vacancy_candidates").update({"notes": f"score_warn: {msg[:200]}"}).eq("id", vid).eq(
                 "pipeline_status",
                 "pending_score",
             ).execute()

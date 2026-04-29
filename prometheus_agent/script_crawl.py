@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Прогон «сырьё → Supabase»: читает URL из markdown, качает HTML, вытаскивает <title>,
-дедуп по (company, role_title), вставляет vacancies (New) + vacancy_sources.
+Прогон «сырьё → Supabase»: читает URL из markdown, качает HTML, вытаскивает JobPosting из ld+json,
+дедупит, вставляет только в vacancy_candidates (pipeline_status=pending_enrich).
 
-Скоринг 28 параметров и письма — следующий слой (или Cursor skill); здесь только crawl+insert.
+Скоринг и письма — следующий слой; здесь только crawl+insert в vacancy_candidates.
 
 Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY; опционально JOB_ID, JOB_TYPE, MAX_CRAWL_URLS,
 CRAWL_DELAY_SEC, CRAWL_SKIP_DOMAINS (через запятую; по умолчанию weworkremotely.com).
@@ -83,10 +83,10 @@ def _fingerprint(*parts: str) -> str:
 def _vacancy_source_exists(sb: Client, platform: str, url: str) -> bool:
     try:
         res = (
-            sb.table("vacancy_sources")
+            sb.table("vacancy_candidates")
             .select("id")
             .eq("platform", platform[:255])
-            .eq("url", url[:2000])
+            .eq("external_url", url[:2000])
             .limit(1)
             .execute()
         )
@@ -193,7 +193,7 @@ def _load_dedup_pairs(sb: Client, limit_rows: int = 15000) -> set[tuple[str, str
     for offset in range(0, limit_rows, step):
         try:
             res = (
-                sb.table("vacancies")
+                sb.table("vacancy_candidates")
                 .select("company, role_title")
                 .range(offset, offset + step - 1)
                 .execute()
@@ -728,35 +728,25 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
                             continue
 
                         row = {
-                            "created_at": _today_str(),
-                            "company": company,
-                            "role_title": role_title,
-                            "platform": netloc[:255],
+                            "search_id": sid or None,
+                            "source": "script_crawl",
                             "tier": tier[:64],
-                            "status": "New",
-                            "score": 0,
+                            "platform": netloc[:255],
+                            "external_url": job_url[:2000],
+                            "company": company[:500],
+                            "role_title": role_title[:500],
+                            "published_at": None,
+                            "fingerprint": _fingerprint(company, role_title, job_url),
+                            "raw": {"details": details},
                             "pipeline_status": "pending_enrich",
-                            "details": json.dumps(details, ensure_ascii=False),
-                            "url": job_url[:2000],
                         }
-                        ins = sb.table("vacancies").insert(row).execute()
+                        ins = sb.table("vacancy_candidates").insert(row).execute()
                         ins_rows = getattr(ins, "data", None) or []
                         if not ins_rows:
                             errors += 1
                             tier_stats[tier]["errors"] += 1
                             print(f"ERR insert empty {job_url}", file=sys.stderr)
                             continue
-                        vid = ins_rows[0]["id"]
-                        try:
-                            sb.table("vacancy_sources").insert(
-                                {
-                                    "vacancy_id": vid,
-                                    "platform": netloc[:255],
-                                    "url": job_url[:2000],
-                                },
-                            ).execute()
-                        except Exception:
-                            pass
                         dedup.add(key)
                         inserted += 1
                         tier_stats[tier]["inserted"] += 1
@@ -774,9 +764,9 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
                                 fingerprint=_fingerprint(company, role_title, job_url),
                                 raw={"details": details},
                                 decision="insert",
-                                inserted_vacancy_id=int(vid),
+                                inserted_vacancy_id=None,
                             )
-                        print(f"OK   {job_url} -> id={vid} {company!r} / {role_title!r}")
+                        print(f"OK   {job_url} -> {company!r} / {role_title!r}")
                     time.sleep(delay)
                     continue
 
@@ -880,8 +870,8 @@ def main() -> None:
         print(f"skipped_blocked_count={len(skipped_blocked)}", file=sys.stderr)
 
     sb = _client()
-    before_v = _count_head(sb, "vacancies")
-    before_s = _count_head(sb, "vacancy_sources")
+    before_v = _count_head(sb, "vacancy_candidates")
+    before_s = _count_head(sb, "vacancy_ingest_decisions")
 
     counters: dict = {
         "before_vacancies": before_v,
@@ -914,8 +904,8 @@ def main() -> None:
             od, after, n_urls, tkey = cursor_save
             _save_crawl_cursor(od, after, n_urls, tkey)
 
-    after_v = _count_head(sb, "vacancies")
-    after_s = _count_head(sb, "vacancy_sources")
+    after_v = _count_head(sb, "vacancy_candidates")
+    after_s = _count_head(sb, "vacancy_ingest_decisions")
     counters["after_vacancies"] = after_v
     counters["after_sources"] = after_s
 

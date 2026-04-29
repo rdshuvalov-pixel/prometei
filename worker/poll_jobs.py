@@ -21,6 +21,72 @@ from supabase import Client, create_client
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+def _jt(raw: object) -> str:
+    return str(raw or "").strip().lower()
+
+
+def _payload(row: dict) -> dict:
+    p = row.get("payload")
+    return p if isinstance(p, dict) else {}
+
+
+def _parent_search_id(row: dict) -> str | None:
+    p = _payload(row)
+    v = p.get("parent_search_id")
+    s = str(v or "").strip()
+    return s or None
+
+
+def _required_prev(job_type: str) -> str | None:
+    jt = _jt(job_type)
+    return {
+        "vacancy_enrich": "keyword_search",
+        "vacancy_score": "vacancy_enrich",
+        "vacancy_llm": "vacancy_score",
+        "vacancy_promote": "vacancy_llm",
+    }.get(jt)
+
+
+def _has_done(sb: Client, *, job_type: str, job_id: str) -> bool:
+    res = (
+        sb.table("job_runs")
+        .select("id")
+        .eq("id", job_id)
+        .eq("job_type", job_type)
+        .eq("status", "done")
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(res, "data", None) or []
+    return bool(rows)
+
+
+def _gate_or_raise(sb: Client, row: dict) -> None:
+    jt = _jt(row.get("job_type"))
+    pid = _parent_search_id(row)
+    if not pid:
+        return
+    prev = _required_prev(jt)
+    if not prev:
+        return
+    if not _has_done(sb, job_type=prev, job_id=pid):
+        raise RuntimeError(f"gate: require {prev}=done for parent_search_id={pid} before {jt}")
+
+
+def _enqueue_next(sb: Client, *, parent_search_id: str, next_job_type: str) -> None:
+    sb.table("job_runs").insert(
+        {
+            "status": "queued",
+            "job_type": next_job_type,
+            "counters": {},
+            "payload": {
+                "source": "worker_autochain",
+                "job_type": next_job_type,
+                "parent_search_id": parent_search_id,
+            },
+        },
+    ).execute()
+
 
 def _client() -> Client:
     url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
@@ -33,18 +99,54 @@ def _client() -> Client:
 
 
 def _pick_queued(sb: Client) -> dict | None:
+    """
+    Picks next queued job.
+
+    Important: multiple jobs can share the exact same created_at (single INSERT of several rows),
+    and UUID ordering is effectively random. To keep pipeline order stable, we apply a lightweight
+    priority within the earliest created_at batch.
+    """
+
+    priority: dict[str, int] = {
+        "keyword_search": 5,
+        "full_search": 5,
+        "vacancy_enrich": 10,
+        "vacancy_score": 20,
+        "vacancy_llm": 30,
+        "vacancy_promote": 40,
+        "tier4_board_feeds": 60,
+        "tier4_ashby": 60,
+        "playwright_search": 60,
+        "script_crawl": 70,
+        "watchlist": 70,
+    }
+
     res = (
         sb.table("job_runs")
         .select("*")
         .eq("status", "queued")
         .order("created_at", desc=False)
-        # created_at is not guaranteed unique; use id as a stable tie-breaker for FIFO-ish behavior
         .order("id", desc=False)
-        .limit(1)
+        .limit(20)
         .execute()
     )
     rows = getattr(res, "data", None) or []
-    return rows[0] if rows else None
+    if not rows:
+        return None
+
+    earliest = min((r.get("created_at") for r in rows if r.get("created_at") is not None), default=None)
+    if earliest is None:
+        earliest_rows = rows
+    else:
+        earliest_rows = [r for r in rows if r.get("created_at") == earliest] or rows
+
+    def _key(r: dict) -> tuple[int, str]:
+        jt = _jt(r.get("job_type"))
+        pr = priority.get(jt, 50)
+        return (pr, str(r.get("id") or ""))
+
+    earliest_rows.sort(key=_key)
+    return earliest_rows[0]
 
 
 def _claim(sb: Client, job_id: str) -> bool:
@@ -70,6 +172,22 @@ def _finish_ok(sb: Client, job_id: str, counters: dict, log_extra: str) -> None:
             "log": log[-120_000:],
         },
     ).eq("id", job_id).execute()
+
+    # Autochain: ставим только следующий шаг, чтобы не было путаницы.
+    jt = _jt(prev.get("job_type"))
+    pid = str(prev.get("id") or "").strip()
+    payload = _payload(prev)
+    parent = _parent_search_id(prev) or pid
+    if jt in ("keyword_search", "full_search"):
+        _enqueue_next(sb, parent_search_id=pid, next_job_type="vacancy_enrich")
+        return
+    if payload.get("parent_search_id"):
+        if jt == "vacancy_enrich":
+            _enqueue_next(sb, parent_search_id=parent, next_job_type="vacancy_score")
+        elif jt == "vacancy_score":
+            _enqueue_next(sb, parent_search_id=parent, next_job_type="vacancy_llm")
+        elif jt == "vacancy_llm":
+            _enqueue_next(sb, parent_search_id=parent, next_job_type="vacancy_promote")
 
 
 def _finish_fail(sb: Client, job_id: str, err: str) -> None:
@@ -135,9 +253,15 @@ def run_once(sb: Client) -> None:
     if not job:
         return
     job_id = str(job["id"])
-    job_type = str(job.get("job_type") or "script_crawl")
+    job_type = _jt(job.get("job_type") or "script_crawl")
 
     if not _claim(sb, job_id):
+        return
+
+    try:
+        _gate_or_raise(sb, job)
+    except Exception as e:  # noqa: BLE001
+        _finish_fail(sb, job_id, str(e))
         return
 
     cmd = (os.environ.get("WORKER_CMD") or "").strip()
@@ -157,6 +281,7 @@ def run_once(sb: Client) -> None:
         "WORKER_JOB_ID": job_id,
         "JOB_ID": job_id,
         "JOB_TYPE": job_type,
+        "SEARCH_ID": _parent_search_id(job) or job_id,
     }
 
     try:

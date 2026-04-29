@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 vacancy_llm (optional):
-  - selects strong vacancies (status=Scored, score>=LLM_MIN_SCORE)
+  - selects strong vacancy_candidates (pipeline_status=scored, score>=LLM_MIN_SCORE)
   - generates fit_reasoning + cover letters
   - writes fit_reasoning, cover_formal, cover_informal
 
@@ -216,17 +216,35 @@ def main() -> None:
     n = _batch_size()
     min_score = _min_score()
     force = (os.environ.get("VACANCY_LLM_FORCE") or "").strip().lower() in ("1", "true", "yes", "on")
+    sid = (os.environ.get("SEARCH_ID") or "").strip()
 
-    res = (
-        sb.table("vacancies")
-        .select("id, company, role_title, url, details, score, status, fit_reasoning, cover_formal, cover_informal, notes")
-        .eq("status", "Scored")
+    q = (
+        sb.table("vacancy_candidates")
+        .select(
+            "id, company, role_title, external_url, raw, score, pipeline_status, fit_reasoning, cover_formal, cover_informal, notes",
+        )
+        .eq("pipeline_status", "scored")
         .gte("score", min_score)
         .order("score", desc=True)
-        .limit(n)
-        .execute()
     )
+    if sid:
+        q = q.eq("search_id", sid)
+    res = q.limit(n).execute()
     rows = getattr(res, "data", None) or []
+    target_table = "vacancy_candidates"
+
+    if not rows:
+        # Legacy fallback: process vacancies directly if candidates pipeline is not producing scored rows yet.
+        res2 = (
+            sb.table("vacancies")
+            .select("id, company, role_title, url, details, score, fit_reasoning, cover_formal, cover_informal, notes")
+            .gte("score", min_score)
+            .order("score", desc=True)
+            .limit(n)
+            .execute()
+        )
+        rows = getattr(res2, "data", None) or []
+        target_table = "vacancies"
 
     updated = 0
     skipped = 0
@@ -245,7 +263,21 @@ def main() -> None:
             skipped += 1
             continue
         try:
-            out = _call_openai(key=key, base=base, model=model, prompt=_prompt(r))
+            if target_table == "vacancies":
+                prompt_row = {
+                    "company": r.get("company"),
+                    "role_title": r.get("role_title"),
+                    "url": r.get("url"),
+                    "details": r.get("details"),
+                }
+            else:
+                prompt_row = {
+                    "company": r.get("company"),
+                    "role_title": r.get("role_title"),
+                    "url": r.get("external_url"),
+                    "details": r.get("raw"),
+                }
+            out = _call_openai(key=key, base=base, model=model, prompt=_prompt(prompt_row))
             patch: dict = {}
             cf = _pick_str(out, "cover_formal", "formal", "coverLetterFormal")
             ci = _pick_str(out, "cover_informal", "informal", "coverLetterInformal")
@@ -279,12 +311,15 @@ def main() -> None:
             if not patch:
                 skipped += 1
                 continue
-            sb.table("vacancies").update(patch).eq("id", vid).execute()
+            if target_table == "vacancy_candidates":
+                patch["llm_at"] = _utc_iso()
+                patch["pipeline_status"] = "llm_done"
+            sb.table(target_table).update(patch).eq("id", vid).execute()
             updated += 1
         except Exception as e:  # noqa: BLE001
             errors += 1
             last_error = str(e)
-            sb.table("vacancies").update({"notes": f"llm_warn: {str(e)[:200]}"}).eq("id", vid).execute()
+            sb.table(target_table).update({"notes": f"llm_warn: {str(e)[:200]}"}).eq("id", vid).execute()
 
     summary = {
         "job_type": "vacancy_llm",

@@ -106,7 +106,26 @@ nano .env.worker
 - **`POLL_INTERVAL_SEC`** — как часто опрашивать очередь (по умолчанию 20).
 - **`WORKER_CMD`** — пусто = stub **`done`**. Иначе одна из команд (путь **только** с префиксом **`/app/`** — так устроен [`Dockerfile.worker`](../Dockerfile.worker), `WORKDIR /app`):
   - **`python3 /app/prometheus_agent/script_crawl.py`** — обход URL из `search_targets.md` (или `watchlist_targets.md`, если в очереди **`job_type`:** `watchlist`). Отчёт: **`prometheus_agent/out/crawl_report_latest.md`** (в контейнере путь **`/app/prometheus_agent/out/`**).
-  - **`python3 /app/prometheus_agent/worker_dispatch.py`** — по **`JOB_TYPE`** из задачи: обычный crawl или **`tier4_ashby`** → [`ashby_crawler.py`](../prometheus_agent/ashby_crawler.py) (Ashby public API, фильтр PM/Lead + EU/remote + возраст вакансии).
+  - **`python3 /app/prometheus_agent/worker_dispatch.py`** — по **`JOB_TYPE`** из задачи запускает нужный шаг пайплайна:
+    - `keyword_search` / `full_search` — поиск (пишет кандидатов в `vacancy_candidates`)
+    - `tier4_ashby` / `board_feeds` / `watchlist` / `script_crawl` — сбор (пишет **только** в `vacancy_candidates`)
+    - `vacancy_enrich` — enrich (**только** `vacancy_candidates`)
+    - `vacancy_score` — скоринг (**только** `vacancy_candidates`)
+    - `vacancy_llm` — LLM (**только** `vacancy_candidates`)
+    - `vacancy_promote` — перенос прошедших условий из `vacancy_candidates` → `vacancies` + `vacancy_sources`
+    - Важно: **`vacancies` теперь заполняется только шагом `vacancy_promote`**.
+
+### Иерархия пайплайна (строго, без исключений)
+
+Для одного прогона (run id = `job_runs.id` у `keyword_search`) порядок всегда такой:
+
+- `keyword_search` (**корень прогона**, пишет в `vacancy_candidates.search_id=<run_id>`)
+- `vacancy_enrich` (работает только по `vacancy_candidates.pipeline_status=pending_enrich`)
+- `vacancy_score` (работает только по `vacancy_candidates.pipeline_status=pending_score`)
+- `vacancy_llm` (работает только по `vacancy_candidates.pipeline_status=scored`, ставит `llm_done`)
+- `vacancy_promote` (берёт только `vacancy_candidates.pipeline_status=llm_done` и переносит в `vacancies`)
+
+Правило: **до `llm_done` никакие записи не должны попадать в `vacancies`**.
   - Неверно: **`/data/prometheus_agent/...`** — в этом образе каталога **`/data`** нет, будет **`[Errno 2] No such file or directory`** и **`exit=2`**. Замени на **`/app/prometheus_agent/...`**.
 - **`MAX_CRAWL_URLS`** — лимит URL за прогон для `script_crawl`; **`0`** = без лимита (все ссылки из markdown).
 - **`CRAWL_DELAY_SEC`** — пауза между HTTP-запросами (сек).
