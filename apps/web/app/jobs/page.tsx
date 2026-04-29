@@ -55,12 +55,6 @@ export default async function JobsPage() {
       <h1 className="mb-2 text-2xl font-black tracking-tight text-neutral-900 dark:text-amber-50">
         Run history
       </h1>
-      <p className="mb-4 text-sm font-medium text-neutral-800 dark:text-amber-100/80">
-        The worker picks up jobs in <strong>queued</strong> state. On <strong>failed</strong>, open
-        the <strong>Error</strong> block and the <strong>log</strong> details. For the Docker worker,
-        check container logs on your server (e.g. <code className="font-mono">docker compose logs</code>{" "}
-        for the worker service).
-      </p>
 
       {funnelRows.length ? (
         <section className="mb-10 rounded-2xl border-4 border-neutral-900 bg-white/90 p-4 text-sm font-medium text-neutral-800 shadow-[4px_4px_0_0_#171717] dark:bg-neutral-900/80 dark:text-amber-100/85 dark:shadow-[4px_4px_0_0_#fbbf24]">
