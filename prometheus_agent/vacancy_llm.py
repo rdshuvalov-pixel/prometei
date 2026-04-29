@@ -122,6 +122,38 @@ def _call_openai(*, key: str, base: str, model: str, prompt: str, timeout_sec: f
     return obj
 
 
+def _pick_str(out: dict, *keys: str) -> str | None:
+    for k in keys:
+        v = out.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def _derive_fit_reasoning_from_cover(cover: str) -> str | None:
+    s = (cover or "").strip()
+    if not s:
+        return None
+    # Cheap fallback: take first 2 sentences (or first 240 chars).
+    parts: list[str] = []
+    buf = ""
+    for ch in s:
+        buf += ch
+        if ch in ".!?":
+            p = buf.strip()
+            if p:
+                parts.append(p)
+            buf = ""
+        if len(parts) >= 2:
+            break
+        if len("".join(parts)) >= 260:
+            break
+    out = " ".join(parts).strip()
+    if out:
+        return out[:600]
+    return s[:240]
+
+
 def main() -> None:
     cfg = _openai_cfg()
     if not cfg:
@@ -161,15 +193,20 @@ def main() -> None:
         try:
             out = _call_openai(key=key, base=base, model=model, prompt=_prompt(r))
             patch: dict = {}
-            fr = out.get("fit_reasoning")
-            cf = out.get("cover_formal")
-            ci = out.get("cover_informal")
-            if isinstance(fr, str) and fr.strip():
-                patch["fit_reasoning"] = fr.strip()
-            if isinstance(cf, str) and cf.strip():
-                patch["cover_formal"] = cf.strip()
-            if isinstance(ci, str) and ci.strip():
-                patch["cover_informal"] = ci.strip()
+            cf = _pick_str(out, "cover_formal", "formal", "coverLetterFormal")
+            ci = _pick_str(out, "cover_informal", "informal", "coverLetterInformal")
+            fr = _pick_str(out, "fit_reasoning", "reasoning", "fit", "rationale", "match_reasoning")
+
+            if cf:
+                patch["cover_formal"] = cf
+            if ci:
+                patch["cover_informal"] = ci
+            if fr:
+                patch["fit_reasoning"] = fr
+            elif cf:
+                derived = _derive_fit_reasoning_from_cover(cf)
+                if derived:
+                    patch["fit_reasoning"] = derived
             if not patch:
                 skipped += 1
                 continue
