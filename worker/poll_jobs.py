@@ -47,16 +47,21 @@ def _required_prev(job_type: str) -> str | None:
     }.get(jt)
 
 
-def _has_done(sb: Client, *, job_type: str, job_id: str) -> bool:
-    res = (
-        sb.table("job_runs")
-        .select("id")
-        .eq("id", job_id)
-        .eq("job_type", job_type)
-        .eq("status", "done")
-        .limit(1)
-        .execute()
-    )
+def _has_done(sb: Client, *, job_type: str, parent_search_id: str) -> bool:
+    """
+    Hard gate helper.
+
+    For keyword_search/full_search the run id equals the job id (root row).
+    For pipeline steps (enrich/score/llm/promote) we enqueue separate job_runs rows
+    and link them via payload.parent_search_id to the root run id.
+    """
+    jt = _jt(job_type)
+    q = sb.table("job_runs").select("id").eq("job_type", jt).eq("status", "done").limit(1)
+    if jt in ("keyword_search", "full_search"):
+        q = q.eq("id", parent_search_id)
+    else:
+        q = q.eq("payload->>parent_search_id", parent_search_id)
+    res = q.execute()
     rows = getattr(res, "data", None) or []
     return bool(rows)
 
@@ -69,7 +74,7 @@ def _gate_or_raise(sb: Client, row: dict) -> None:
     prev = _required_prev(jt)
     if not prev:
         return
-    if not _has_done(sb, job_type=prev, job_id=pid):
+    if not _has_done(sb, job_type=prev, parent_search_id=pid):
         raise RuntimeError(f"gate: require {prev}=done for parent_search_id={pid} before {jt}")
 
 
