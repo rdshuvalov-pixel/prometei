@@ -7,5 +7,7 @@ apps/web/.next/
 prometheus_agent/.env
 prometheus_agent/token.json
 prometheus_agent/credentials.json
+prometheus_agent/client_secret_*.json
+prometheus_agent/gmail_token.json
 prometheus_agent/out/*
 !prometheus_agent/out/.gitkeep
