@@ -73,15 +73,41 @@ def _as_text(v: object) -> str:
 
 
 def _prompt(row: dict) -> str:
+    # Candidate facts (from prometei_job_search_skill/data_cv.md + Screening_Shuvalov.md).
+    candidate = "\n".join(
+        [
+            "Кандидат: Ruslan Shuvalov",
+            "Профиль: Senior Product Manager | FinTech | B2B SaaS | AI Products",
+            "Локация: Portugal (near Lisbon) | EU citizen | Remote preferred",
+            "",
+            "Ключевые достижения (используй 1 сильную цифру):",
+            "- ARPU +90% (монетизация, contextual upsell, UDP Auto)",
+            "- Support 2.5 days → 6 hours; 46% requests automated by AI agent (Unlimit)",
+            "- New product 0 → 2.4M RUB/month; +31% revenue contribution (InSales)",
+        ],
+    )
+
+    # Output contract (from 02_output.md + 05_cover_letter.md + 03_communication.md).
     return "\n".join(
         [
-            "Ты помощник для подготовки отклика на вакансию.",
-            "Сгенерируй краткое объяснение соответствия и 2 варианта cover letter.",
+            "Ты — карьерный агент «Прометей». Пиши коротко, по делу, без воды и без выдумок.",
+            "Цель: подготовить материалы для отклика по вакансии.",
             "",
             "Верни СТРОГО JSON объект с ключами:",
-            '  fit_reasoning: string (2-4 предложения, по делу, без воды)',
-            '  cover_formal: string (до ~1200 символов)',
-            '  cover_informal: string (до ~900 символов)',
+            '  fit_reasoning: string (2-4 предложения: стоит ли откликаться и почему)',
+            '  why_fit: array[string] (5-8 bullet points: JD -> релевантный опыт кандидата)',
+            '  why_not: array[string] (0-5 bullet points: риски/несовпадения или пустой список)',
+            '  cover_formal: string (EN, 150–220 words, 3–5 paragraphs, 1 strong metric)',
+            '  cover_informal: string (EN, 5–8 lines, 1–2 facts/metrics, вопрос в конце)',
+            '  notes: string (коротко: если данные неполные/remote неясно/ATS JS-heavy — что проверить)',
+            "",
+            "Правила:",
+            "- Не пиши общие фразы типа “motivated / great fit” без доказательств.",
+            "- Если в JD про payments/compliance — используй FinTech фрейм; если про growth/pricing — growth фрейм.",
+            "- Если локация спорная (office/hybrid не Lisbon) — укажи риск в notes.",
+            "",
+            "Данные кандидата:",
+            candidate,
             "",
             f"Компания: {_as_text(row.get('company'))}",
             f"Роль: {_as_text(row.get('role_title'))}",
@@ -137,6 +163,19 @@ def _pick_str(out: dict, *keys: str) -> str | None:
         v = out.get(k)
         if isinstance(v, str) and v.strip():
             return v.strip()
+    return None
+
+
+def _pick_list_str(out: dict, *keys: str) -> list[str] | None:
+    for k in keys:
+        v = out.get(k)
+        if isinstance(v, list):
+            items: list[str] = []
+            for it in v:
+                if isinstance(it, str) and it.strip():
+                    items.append(it.strip())
+            if items:
+                return items
     return None
 
 
@@ -207,6 +246,9 @@ def main() -> None:
             cf = _pick_str(out, "cover_formal", "formal", "coverLetterFormal")
             ci = _pick_str(out, "cover_informal", "informal", "coverLetterInformal")
             fr = _pick_str(out, "fit_reasoning", "reasoning", "fit", "rationale", "match_reasoning")
+            notes = _pick_str(out, "notes", "note")
+            why_fit = _pick_list_str(out, "why_fit", "whyFit", "fit_points")
+            why_not = _pick_list_str(out, "why_not", "whyNot", "risks")
 
             if cf:
                 patch["cover_formal"] = cf
@@ -218,6 +260,18 @@ def main() -> None:
                 derived = _derive_fit_reasoning_from_cover(cf)
                 if derived:
                     patch["fit_reasoning"] = derived
+            # Store structured bullets into notes (append) to keep UI compatibility.
+            note_parts: list[str] = []
+            if why_fit:
+                note_parts.append("✅ Почему подходит:\n- " + "\n- ".join(why_fit[:10]))
+            if why_not:
+                note_parts.append("⚠️ Почему не подходит:\n- " + "\n- ".join(why_not[:10]))
+            if notes:
+                note_parts.append(f"📝 Notes:\n{notes}")
+            if note_parts:
+                prev = _as_text(r.get("notes")).strip()
+                blob = "\n\n".join(note_parts).strip()
+                patch["notes"] = (prev + "\n\n" + blob).strip() if prev else blob
             if not patch:
                 skipped += 1
                 continue
