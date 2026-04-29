@@ -27,7 +27,8 @@ from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 from supabase import Client, create_client
 
-from .platform_search import PlatformLane, detect_platform
+# NOTE: this file is executed as a script in the worker container, not as a package module.
+from platform_search import PlatformLane, detect_platform
 
 _SUMMARY_MARKER = "--- сводка ---"
 
