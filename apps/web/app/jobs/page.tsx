@@ -44,7 +44,7 @@ export default async function JobsPage() {
     if (error) throw error;
     jobs = (data ?? []) as JobRow[];
 
-    const funnel = await sb.from("v_search_funnel").select("*").limit(30);
+    const funnel = await sb.from("v_search_funnel").select("*").limit(2);
     if (!funnel.error) funnelRows = (funnel.data ?? []) as JobRow[];
   } catch (e) {
     loadError = toErrorMessage(e);
