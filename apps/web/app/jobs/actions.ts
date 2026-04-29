@@ -29,24 +29,11 @@ export async function enqueueFullSearchFromSecret(): Promise<SecretEnqueueState>
     }
 
     const sb = getSupabaseAdmin();
-    const { data: searchRow, error: searchErr } = await sb
-      .from("search_runs")
-      .insert({
-        status: "queued",
-        source: "jobs_secret_ui",
-        params: { rate_limited_cookie: RUN_COOKIE },
-      })
-      .select("id")
-      .single();
-    if (searchErr) return { ok: false, message: searchErr.message };
-    const search_id = String(searchRow?.id ?? "").trim();
-    if (!search_id) return { ok: false, message: "Failed to create search run." };
-
     const { error } = await sb.from("job_runs").insert({
       status: "queued",
-      job_type: "full_search",
+      job_type: "keyword_search",
       counters: {},
-      payload: { job_type: "full_search", source: "jobs_secret_ui", search_id },
+      payload: { job_type: "keyword_search", source: "jobs_secret_ui" },
     });
     if (error) return { ok: false, message: error.message };
 
@@ -62,7 +49,7 @@ export async function enqueueFullSearchFromSecret(): Promise<SecretEnqueueState>
     revalidatePath("/");
     return {
       ok: true,
-      message: `Queued: full_search (search_id=${search_id}).`,
+      message: "Queued: keyword_search.",
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

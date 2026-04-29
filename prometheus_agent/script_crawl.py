@@ -735,7 +735,7 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
                             "tier": tier[:64],
                             "status": "New",
                             "score": 0,
-                            "match_status": "pending_score",
+                            "pipeline_status": "pending_enrich",
                             "details": json.dumps(details, ensure_ascii=False),
                             "url": job_url[:2000],
                         }
