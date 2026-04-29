@@ -800,7 +800,7 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
                     time.sleep(delay)
                     continue
 
-                # Для search-run не пишем «псевдо-вакансии» из <title> — только логируем как пропуск.
+                # Никогда не пишем «псевдо-вакансии» из <title> — только логируем как пропуск.
                 title = _extract_title(r.text) or ""
                 if sid:
                     _log_candidate_and_decision(
@@ -818,66 +818,7 @@ def _run_crawl(sb: Client, urls: list[tuple[str, str]], dedup: set[tuple[str, st
                         decision="skip_no_ldjson",
                         reason="no_jobposting_ldjson",
                     )
-                else:
-                    # legacy режим: старое поведение (может засорять). Оставляем для обратной совместимости.
-                    if not title:
-                        title = f"fetch:{netloc}"
-                    company, role_title = _guess_company_role(title, netloc)
-                    key = (_norm_key(company), _norm_key(role_title))
-                    if key in dedup:
-                        duplicates += 1
-                        tier_stats[tier]["duplicates"] += 1
-                        print(f"DUP  {url} -> {company!r} / {role_title!r}")
-                        time.sleep(delay)
-                        continue
-                    row = {
-                        "created_at": _today_str(),
-                        "company": company,
-                        "role_title": role_title,
-                        "platform": netloc[:255],
-                        "tier": tier[:64],
-                        "status": "New",
-                        "score": 0,
-                        "match_status": "pending_score",
-                        "details": json.dumps(
-                            {
-                                "mvp_crawl": True,
-                                "listing_source": "page_title_fallback",
-                                "fetched_at": fetched_at,
-                                "http_status": r.status_code,
-                                "date_unknown": True,
-                                "tier4_query": t4q,
-                                "listing_date_note": (
-                                    "⚠️ Дата публикации неизвестна (нет JobPosting в ld+json)"
-                                ),
-                            },
-                            ensure_ascii=False,
-                        ),
-                        "url": url[:2000],
-                    }
-                    ins = sb.table("vacancies").insert(row).execute()
-                    ins_rows = getattr(ins, "data", None) or []
-                    if not ins_rows:
-                        errors += 1
-                        tier_stats[tier]["errors"] += 1
-                        print(f"ERR insert empty {url}", file=sys.stderr)
-                        time.sleep(delay)
-                        continue
-                    vid = ins_rows[0]["id"]
-                    try:
-                        sb.table("vacancy_sources").insert(
-                            {
-                                "vacancy_id": vid,
-                                "platform": netloc[:255],
-                                "url": url[:2000],
-                            },
-                        ).execute()
-                    except Exception:
-                        pass
-                    dedup.add(key)
-                    inserted += 1
-                    tier_stats[tier]["inserted"] += 1
-                    print(f"OK   {url} -> id={vid} {company!r} / {role_title!r}")
+                continue
             except Exception as e:  # noqa: BLE001
                 errors += 1
                 tier_stats[tier]["errors"] += 1
