@@ -62,26 +62,6 @@ export default async function JobsPage() {
         for the worker service).
       </p>
 
-      <section className="mb-8 rounded-2xl border-4 border-neutral-900 bg-white/90 p-4 text-sm font-medium text-neutral-800 shadow-[4px_4px_0_0_#171717] dark:bg-neutral-900/80 dark:text-amber-100/85 dark:shadow-[4px_4px_0_0_#fbbf24]">
-        <p className="font-black text-neutral-900 dark:text-amber-50">Enqueue jobs</p>
-        <p className="mt-2">
-          <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">
-            POST /api/jobs
-          </code>{" "}
-          with JSON body such as{" "}
-          <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">
-            {`{"job_type":"script_crawl"}`}
-          </code>{" "}
-          or another <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">job_type</code>.
-          If <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">ENQUEUE_SECRET</code>{" "}
-          is set on Vercel, send header{" "}
-          <code className="rounded bg-yellow-200/90 px-1 font-mono dark:bg-yellow-500/25">
-            Authorization: Bearer …
-          </code>
-          .
-        </p>
-      </section>
-
       {funnelRows.length ? (
         <section className="mb-10 rounded-2xl border-4 border-neutral-900 bg-white/90 p-4 text-sm font-medium text-neutral-800 shadow-[4px_4px_0_0_#171717] dark:bg-neutral-900/80 dark:text-amber-100/85 dark:shadow-[4px_4px_0_0_#fbbf24]">
           <p className="font-black text-neutral-900 dark:text-amber-50">Search funnel (latest)</p>
@@ -137,11 +117,7 @@ export default async function JobsPage() {
         </div>
       ) : jobs.length === 0 ? (
         <p className="text-sm font-medium text-neutral-700 dark:text-amber-200/80">
-          No rows yet. Enqueue via{" "}
-          <code className="rounded border border-neutral-800 bg-yellow-200/70 px-1 font-mono dark:bg-yellow-500/15">
-            POST /api/jobs
-          </code>{" "}
-          (cron or manual).
+          No rows yet.
         </p>
       ) : (
         <ul className="space-y-4">
