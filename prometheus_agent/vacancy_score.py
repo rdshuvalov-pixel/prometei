@@ -68,11 +68,31 @@ def _clamp(n: int) -> int:
     return 0 if n < 0 else (100 if n > 100 else n)
 
 
-_re_bad_contract = re.compile(r"\b(contract|freelance|part[-\s]?time)\b", re.I)
-_re_good_fulltime = re.compile(r"\b(full[-\s]?time|permanent)\b", re.I)
-_re_pm = re.compile(r"\b(product manager|pm)\b", re.I)
-_re_ai = re.compile(r"\b(ai|ml|machine learning)\b", re.I)
-_re_b2b = re.compile(r"\b(b2b)\b", re.I)
+_re_employment_fulltime = re.compile(r"\b(full[-\s]?time|permanent)\b", re.I)
+_re_employment_not_fulltime = re.compile(r"\b(part[-\s]?time|contract|freelance)\b", re.I)
+
+_re_role_ok = re.compile(
+    r"\b(product manager|senior product manager|product lead|head of product|growth product|monetization)\b",
+    re.I,
+)
+_re_role_junior = re.compile(r"\b(junior|intern)\b", re.I)
+_re_role_director_only = re.compile(r"\b(director|vp|vice president|cpo|chief product)\b", re.I)
+
+_re_domain_fintech = re.compile(r"\b(fintech|payments|banking|money flows|card|acquiring|kyc|aml)\b", re.I)
+_re_domain_b2bsaas = re.compile(r"\b(b2b|saas)\b", re.I)
+_re_domain_growth = re.compile(r"\b(moneti[sz]ation|pricing|growth|funnel|arpu|ltv|conversion)\b", re.I)
+_re_domain_ai = re.compile(r"\b(ai|llm|machine learning)\b", re.I)
+_re_domain_platform = re.compile(r"\b(platform|api|integration|integrations|sdk|developer)\b", re.I)
+_re_domain_compliance = re.compile(r"\b(compliance|regulated|audit|soc2|iso27001|gdpr)\b", re.I)
+
+_re_scope_ownership = re.compile(r"\b(strategy|vision|roadmap|ownership)\b", re.I)
+_re_scope_discovery = re.compile(r"\b(discovery|research|user interviews|experiments?)\b", re.I)
+_re_scope_metrics = re.compile(r"\b(kpi|metrics?|instrumentation|analytics|a/b|experimentation)\b", re.I)
+_re_scope_leadership = re.compile(r"\b(cross[-\s]?functional|stakeholder|leadership|influence)\b", re.I)
+
+_re_team_english = re.compile(r"\b(english)\b", re.I)
+_re_team_distributed = re.compile(r"\b(remote[-\s]?first|distributed|international)\b", re.I)
+_re_team_culture = re.compile(r"\b(product culture|strong product)\b", re.I)
 
 
 def _score_row(row: dict) -> tuple[int, dict]:
@@ -86,62 +106,110 @@ def _score_row(row: dict) -> tuple[int, dict]:
 
     text = " \n".join([title, company, details]).strip()
 
-    score = 0
     rules: list[dict] = []
+    critical_failed: list[str] = []
 
-    def add(delta: int, key: str, why: str) -> None:
-        nonlocal score, rules
-        score += delta
-        rules.append({"rule": key, "delta": delta, "why": why})
+    def rule(key: str, points: int, why: str) -> None:
+        rules.append({"rule": key, "points": points, "why": why})
 
-    # role relevance
-    if _re_pm.search(title) or _re_pm.search(text):
-        add(+25, "pm_keyword", "PM keyword in title/details")
+    # --- Group A (critical). If any fails -> cap at 49.
+    role_ok = bool(_re_role_ok.search(title) or _re_role_ok.search(text))
+    if role_ok:
+        rule("A_role", 1, "Role matches PM/Lead/Head/Growth/Monetization")
     else:
-        add(-20, "pm_missing", "No PM keyword")
+        critical_failed.append("role")
+        rule("A_role", 0, "Role does not match target PM family")
 
-    # format
+    # Location: Remote EU ✅ or Hybrid Lisbon ⚠️; onsite/hybrid outside Lisbon is ❌.
+    # We only have coarse signals, so treat onsite as fail; hybrid is ok-ish; remote ok.
     if work_format == "remote":
-        add(+10, "remote", "Remote work format")
+        rule("A_location", 1, "Remote (assume EU-compatible)")
     elif work_format == "hybrid":
-        add(+6, "hybrid", "Hybrid work format")
-    elif work_format == "onsite":
-        add(-4, "onsite", "Onsite only")
+        # cannot verify Lisbon reliably from current extraction; keep as pass but flag later via LLM/notes
+        rule("A_location", 1, "Hybrid (needs Lisbon verification)")
+    else:
+        critical_failed.append("location")
+        rule("A_location", 0, "Onsite/unknown location format")
 
-    # seniority
-    if seniority == "lead":
-        add(+8, "seniority_lead", "Lead/Principal role")
-    elif seniority == "senior":
-        add(+10, "seniority_senior", "Senior role")
-    elif seniority == "mid":
-        add(+4, "seniority_mid", "Mid role")
-    elif seniority == "junior":
-        add(-8, "seniority_junior", "Junior role")
+    # Employment: require full-time (if explicitly not full-time -> fail)
+    if _re_employment_not_fulltime.search(text):
+        critical_failed.append("employment")
+        rule("A_fulltime", 0, "Not full-time (contract/part-time)")
+    else:
+        # pass if full-time mentioned OR unknown
+        rule("A_fulltime", 1, "Full-time ok/unknown")
 
-    # contract flags
-    if _re_bad_contract.search(text):
-        add(-12, "contract", "Contract/freelance/part-time")
-    if _re_good_fulltime.search(text):
-        add(+6, "fulltime", "Full-time/permanent mentioned")
+    # Seniority: middle/senior (junior -> fail); director-only roles are risky but not automatic fail
+    if seniority == "junior" or _re_role_junior.search(title):
+        critical_failed.append("seniority")
+        rule("A_seniority", 0, "Junior role")
+    else:
+        rule("A_seniority", 1, "Middle/Senior ok/unknown")
 
-    # domain hints
-    if _re_ai.search(text):
-        add(+4, "ai_ml", "AI/ML mentioned")
-    if _re_b2b.search(text):
-        add(+3, "b2b", "B2B mentioned")
+    # --- Group B (domain & relevance) 0..40
+    b = 0
+    if _re_domain_fintech.search(text):
+        b += 10
+    if _re_domain_b2bsaas.search(text):
+        b += 8
+    if _re_domain_growth.search(text):
+        b += 8
+    if _re_domain_ai.search(text):
+        b += 6
+    if _re_domain_platform.search(text):
+        b += 5
+    if _re_domain_compliance.search(text):
+        b += 3
+    b = min(b, 40)
+    rule("B_domain", b, "Domain signals (FinTech/B2B SaaS/Growth/AI/Platform/Compliance)")
 
-    # salary signal
+    # --- Group C (scope & expectations) 0..30
+    c = 0
+    if _re_scope_ownership.search(text):
+        c += 10
+    if _re_scope_discovery.search(text):
+        c += 8
+    if _re_scope_metrics.search(text):
+        c += 7
+    if _re_scope_leadership.search(text):
+        c += 5
+    c = min(c, 30)
+    rule("C_scope", c, "Ownership/discovery/metrics/leadership")
+
+    # --- Group D (language & team) 0..15
+    d = 0
+    if _re_team_english.search(text):
+        d += 6
+    if _re_team_distributed.search(text):
+        d += 5
+    if _re_team_culture.search(text):
+        d += 4
+    d = min(d, 15)
+    rule("D_team", d, "English + distributed + product culture")
+
+    # --- Group E (bonuses) 0..10
+    e = 0
+    if work_format == "remote":
+        e += 5
     if salary_min or salary_max:
-        add(+5, "salary_present", "Salary range present")
+        e += 2
+    if "asap" in text.lower() or "urgent" in text.lower():
+        e += 2
+    if _re_role_director_only.search(title) and not _re_role_ok.search(title):
+        e -= 2
+    e = max(0, min(e, 10))
+    rule("E_bonus", e, "Remote-friendly / salary / urgent")
 
-    # quality heuristics
-    if len(title) >= 6:
-        add(+2, "title_len_ok", "Non-empty title")
-    if "http" in _s(row.get("url")):
-        add(+2, "url_present", "URL present")
-
-    final = _clamp(score + 50)  # shift to be mostly positive
-    breakdown = {"base": 50, "raw": score, "final": final, "rules": rules}
+    raw = b + c + d + e
+    final = _clamp(raw)
+    if critical_failed:
+        final = min(final, 49)
+    breakdown = {
+        "final": final,
+        "critical_failed": critical_failed,
+        "groups": {"B": b, "C": c, "D": d, "E": e},
+        "rules": rules,
+    }
     return final, breakdown
 
 
