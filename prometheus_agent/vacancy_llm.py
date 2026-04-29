@@ -215,10 +215,11 @@ def main() -> None:
     sb = _client()
     n = _batch_size()
     min_score = _min_score()
+    force = (os.environ.get("VACANCY_LLM_FORCE") or "").strip().lower() in ("1", "true", "yes", "on")
 
     res = (
         sb.table("vacancies")
-        .select("id, company, role_title, url, details, score, status, fit_reasoning, cover_formal, cover_informal")
+        .select("id, company, role_title, url, details, score, status, fit_reasoning, cover_formal, cover_informal, notes")
         .eq("status", "Scored")
         .gte("score", min_score)
         .order("score", desc=True)
@@ -237,7 +238,10 @@ def main() -> None:
         if vid is None:
             skipped += 1
             continue
-        if _as_text(r.get("fit_reasoning")).strip() and _as_text(r.get("cover_formal")).strip() and _as_text(r.get("cover_informal")).strip():
+        already_has_letters = bool(_as_text(r.get("cover_formal")).strip() and _as_text(r.get("cover_informal")).strip())
+        already_has_reason = bool(_as_text(r.get("fit_reasoning")).strip())
+        already_has_why_blocks = "Почему подходит" in _as_text(r.get("notes")) or "Why fits" in _as_text(r.get("notes"))
+        if (not force) and already_has_letters and already_has_reason and already_has_why_blocks:
             skipped += 1
             continue
         try:

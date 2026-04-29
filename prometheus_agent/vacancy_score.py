@@ -50,6 +50,9 @@ def _promote_min() -> int:
         n = 50
     return max(1, min(n, 100))
 
+def _force() -> bool:
+    return (os.environ.get("VACANCY_SCORE_FORCE") or "").strip().lower() in ("1", "true", "yes", "on")
+
 
 def _s(v: object) -> str:
     return (v if isinstance(v, str) else str(v or "")).strip()
@@ -217,18 +220,18 @@ def main() -> None:
     sb = _client()
     n = _batch_size()
     min_score = _promote_min()
+    force = _force()
 
-    res = (
-        sb.table("vacancies")
-        .select(
-            "id, role_title, company, url, details, pipeline_status, work_format, seniority, salary_min, salary_max",
-            count="exact",
-        )
-        .eq("pipeline_status", "pending_score")
-        .order("created_at", desc=False)
-        .limit(n)
-        .execute()
+    q = sb.table("vacancies").select(
+        "id, role_title, company, url, details, pipeline_status, work_format, seniority, salary_min, salary_max",
+        count="exact",
     )
+    if force:
+        # Rescore highest-score first (we'll overwrite score + breakdown deterministically).
+        q = q.order("score", desc=True)
+    else:
+        q = q.eq("pipeline_status", "pending_score").order("created_at", desc=False)
+    res = q.limit(n).execute()
     rows = getattr(res, "data", None) or []
     total_pending = int(getattr(res, "count", None) or 0)
 
@@ -252,7 +255,10 @@ def main() -> None:
             }
             if score >= min_score:
                 patch["status"] = "Scored"
-            sb.table("vacancies").update(patch).eq("id", vid).eq("pipeline_status", "pending_score").execute()
+            up = sb.table("vacancies").update(patch).eq("id", vid)
+            if not force:
+                up = up.eq("pipeline_status", "pending_score")
+            up.execute()
             scored += 1
             if score >= min_score:
                 promoted += 1
