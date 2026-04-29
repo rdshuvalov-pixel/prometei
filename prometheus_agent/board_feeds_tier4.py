@@ -126,6 +126,10 @@ def _log_candidate_and_decision(
     reason: str | None = None,
     inserted_vacancy_id: int | None = None,
 ) -> None:
+    if not (company and str(company).strip()) or not (role_title and str(role_title).strip()):
+        return
+    if not (external_url and str(external_url).strip().startswith("http")):
+        return
     try:
         ins = sb.table("vacancy_candidates").insert(
             {

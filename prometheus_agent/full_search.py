@@ -175,9 +175,9 @@ def main() -> None:
     timeout = int(os.environ.get("JOB_TIMEOUT_SEC", "3600"))
 
     scripts = [
-        ("extract", "script_crawl", _base_dir() / "script_crawl.py"),
-        ("extract", "tier4_board_feeds", _base_dir() / "board_feeds_tier4.py"),
-        ("extract", "tier4_ashby", _base_dir() / "ashby_crawler.py"),
+        # Новый основной шаг: именно поиск по ключевому слову (Product Manager).
+        ("search", "keyword_search", _base_dir() / "keyword_search.py"),
+        # Временная совместимость: HTML json-ld extractor (если нужно) можно вернуть отдельно.
     ]
 
     overall: dict = {

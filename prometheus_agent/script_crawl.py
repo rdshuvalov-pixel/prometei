@@ -147,6 +147,11 @@ def _log_candidate_and_decision(
     matched_existing_vacancy_id: int | None = None,
     inserted_vacancy_id: int | None = None,
 ) -> None:
+    # Никогда не пишем пустые кандидаты (иначе воронка превращается в “список площадок”).
+    if not (company and str(company).strip()) and not (role_title and str(role_title).strip()):
+        return
+    if not (external_url and str(external_url).strip().startswith("http")):
+        return
     try:
         ins = sb.table("vacancy_candidates").insert(
             {
