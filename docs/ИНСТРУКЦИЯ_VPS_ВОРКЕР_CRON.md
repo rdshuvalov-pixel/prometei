@@ -313,8 +313,8 @@ curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
 **С секретом в Vercel (`ENQUEUE_SECRET`) и без защиты деплоя (или с заголовком из §8.0):**
 
 ```bash
-export VERCEL_URL="https://prometei-rus-projects-782caf72.vercel.app"
-export ENQUEUE_SECRET="8fa7483ee05e2bfd634d70243da17019db4da088831cec1e58b5e8a8f6b63835"
+export VERCEL_URL="https://<твой-домен>/api/jobs"
+export ENQUEUE_SECRET="ENQUEUE_SECRET"
 
 curl -sS -w "\nHTTP:%{http_code}\n" -X POST "${VERCEL_URL}/api/jobs" \
   -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
