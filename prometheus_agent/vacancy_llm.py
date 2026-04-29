@@ -103,10 +103,15 @@ def _call_openai(*, key: str, base: str, model: str, prompt: str, timeout_sec: f
         ],
         "temperature": 0.4,
     }
-    with httpx.Client(timeout=timeout_sec) as client:
+    # OpenRouter may redirect /api/chat/completions -> /api/v1/chat/completions; follow redirects.
+    with httpx.Client(timeout=timeout_sec, follow_redirects=True) as client:
         r = client.post(url, headers=headers, json=body)
         r.raise_for_status()
-        data = r.json()
+        try:
+            data = r.json()
+        except Exception as e:  # noqa: BLE001
+            head = (r.text or "")[:280].replace("\n", "\\n")
+            raise ValueError(f"non-json response status={r.status_code} head={head} err={e}") from e
     content = (((data or {}).get("choices") or [{}])[0].get("message") or {}).get("content")
     if not isinstance(content, str) or not content.strip():
         raise ValueError("empty LLM response")
