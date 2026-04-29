@@ -5,6 +5,9 @@ WORKDIR /app
 COPY requirements-worker.txt .
 RUN pip install --no-cache-dir -r requirements-worker.txt
 
+# Playwright browsers (Chromium) for JS/SPA career pages.
+RUN playwright install --with-deps chromium
+
 COPY worker/poll_jobs.py .
 COPY prometheus_agent/ ./prometheus_agent/
 

@@ -86,6 +86,7 @@ def main() -> None:
     steps = [
         ("search", "tier4_board_feeds", base / "board_feeds_tier4.py"),
         ("search", "tier4_ashby", base / "ashby_crawler.py"),
+        ("search", "playwright_search", base / "playwright_search.py"),
     ]
 
     for step, substep, script in steps:
