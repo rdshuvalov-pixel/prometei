@@ -23,6 +23,8 @@ def main() -> int:
     py = sys.executable
     if job_type in ("full_search", "fullrun", "search"):
         script = base / "full_search.py"
+    elif job_type in ("keyword_search", "keyword", "pm_search"):
+        script = base / "keyword_search.py"
     elif job_type in ("tier4_ashby", "ashby_tier4", "ashby"):
         script = base / "ashby_crawler.py"
     elif job_type in ("tier4_board_feeds", "tier4_greenhouse_lever", "board_feeds"):

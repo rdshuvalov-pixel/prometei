@@ -96,6 +96,9 @@ export default async function JobsPage() {
               const pool = String(r.targets_pool_total ?? "0");
               const attempted = String(r.targets_attempted_total ?? "0");
               const ok = String(r.targets_fetched_ok ?? "0");
+              const searchedOk = String(r.searched_ok ?? "0");
+              const searchedNone = String(r.searched_no_results ?? "0");
+              const notSearchable = String(r.skipped_not_searchable ?? "0");
               const cand = String(r.candidates_total ?? "0");
               const ins = String(r.inserted ?? "0");
               const skip = String(r.skipped ?? "0");
@@ -112,6 +115,10 @@ export default async function JobsPage() {
                     pool: <strong>{pool}</strong> · attempted: <strong>{attempted}</strong> (ok {ok}) · candidates:{" "}
                     <strong>{cand}</strong> · inserted:{" "}
                     <strong>{ins}</strong> · skipped: <strong>{skip}</strong>
+                  </p>
+                  <p className="mt-1 text-xs opacity-85">
+                    searched_ok: <strong>{searchedOk}</strong> · searched_no_results: <strong>{searchedNone}</strong> ·
+                    not_searchable: <strong>{notSearchable}</strong>
                   </p>
                 </li>
               );
