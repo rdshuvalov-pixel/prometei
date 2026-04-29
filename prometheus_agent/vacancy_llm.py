@@ -181,6 +181,7 @@ def main() -> None:
     updated = 0
     skipped = 0
     errors = 0
+    last_error: str | None = None
 
     for r in rows:
         vid = r.get("id")
@@ -214,17 +215,20 @@ def main() -> None:
             updated += 1
         except Exception as e:  # noqa: BLE001
             errors += 1
+            last_error = str(e)
             sb.table("vacancies").update({"notes": f"llm_warn: {str(e)[:200]}"}).eq("id", vid).execute()
 
     summary = {
         "job_type": "vacancy_llm",
         "model": model,
+        "base_url": base,
         "min_score": min_score,
         "batch_size": n,
         "rows_loaded": len(rows),
         "updated": updated,
         "skipped": skipped,
         "errors": errors,
+        "last_error": (last_error[:400] if last_error else None),
         "finished_at": _utc_iso(),
     }
     print(_SUMMARY_MARKER, flush=True)
