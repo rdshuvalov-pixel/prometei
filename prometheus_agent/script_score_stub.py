@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Заглушка очереди «оценка»: считает вакансии без скоринга; переводит в status=Scored строки
-с score >= SCORE_PROMOTE_MIN (по умолчанию 50) и match_status=pending_score. Полноценный
+с score >= SCORE_PROMOTE_MIN (по умолчанию 50) и pipeline_status=pending_score. Полноценный
 28-параметровый скоринг — отдельный слой.
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ def main() -> None:
     pending = (
         sb.table("vacancies")
         .select("id", count="exact", head=True)
-        .eq("match_status", "pending_score")
+        .eq("pipeline_status", "pending_score")
         .execute()
     )
     n_pending = int(getattr(pending, "count", None) or 0)
@@ -55,7 +55,7 @@ def main() -> None:
         up = (
             sb.table("vacancies")
             .update({"status": "Scored"})
-            .eq("match_status", "pending_score")
+            .eq("pipeline_status", "pending_score")
             .gte("score", min_score)
             .or_("status.is.null,status.neq.Scored")
             .select("id")

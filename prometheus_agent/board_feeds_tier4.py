@@ -340,7 +340,7 @@ def _try_insert(
         "tier": tier[:64],
         "status": "New",
         "score": 0,
-        "match_status": "pending_score",
+        "pipeline_status": "pending_enrich",
         "details": json.dumps(details, ensure_ascii=False),
         "url": job_url[:2000],
     }

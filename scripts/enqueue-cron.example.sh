@@ -12,6 +12,8 @@
 # Другие job_type (нужен WORKER_CMD=python3 /app/prometheus_agent/worker_dispatch.py):
 #   {"job_type":"tier4_ashby"}        — Ashby (ASHBY_SLUGS в .env.worker)
 #   {"job_type":"tier4_board_feeds"} — GH/Lever/Workable + по умолчанию Remotive+RemoteOK (см. .env.worker)
+#   {"job_type":"vacancy_enrich"}    — обогащение полей в vacancies (pending_enrich → pending_score)
+#   {"job_type":"vacancy_score"}     — rule-based скоринг (pending_score → scored + status=Scored)
 
 set -eu
 

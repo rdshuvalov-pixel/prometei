@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
 from supabase import Client, create_client
@@ -30,58 +32,34 @@ def _client() -> Client:
 
 
 def _search_id() -> str:
-    return (os.environ.get("SEARCH_ID") or "").strip()
+    # Backward compat: treat the current job_run_id as search/run id.
+    return (os.environ.get("SEARCH_ID") or os.environ.get("WORKER_JOB_ID") or os.environ.get("JOB_ID") or "").strip()
 
 
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _step_start(sb: Client, *, search_id: str, step: str, substep: str) -> str:
-    res = sb.table("search_steps").insert(
-        {"search_id": search_id, "step": step, "substep": substep, "status": "running"},
-    ).execute()
-    data = getattr(res, "data", None)
-    row = data[0] if isinstance(data, list) and data else (data or {})
-    sid = str((row or {}).get("id") or "").strip()
-    if not sid:
-        raise RuntimeError("failed to create search_steps row")
-    return sid
-
-
-def _step_finish(sb: Client, *, step_id: str, status: str, counters: dict, error: str | None = None) -> None:
-    patch: dict = {"status": status, "finished_at": _utc_iso(), "counters": counters}
-    if error:
-        patch["error"] = error[:8000]
-    sb.table("search_steps").update(patch).eq("id", step_id).execute()
-
-
 def main() -> None:
-    # MVP: reuse existing implementations; focus on correctly writing funnel artifacts.
     job_id = (os.environ.get("WORKER_JOB_ID") or os.environ.get("JOB_ID") or "").strip()
     sid = _search_id()
-    sb = _client()
+    if sid and not os.environ.get("SEARCH_ID"):
+        os.environ["SEARCH_ID"] = sid
 
     keyword = (os.environ.get("KEYWORD") or "Product Manager").strip()
     counters: dict = {
         "job_type": "keyword_search",
         "keyword": keyword,
         "job_id": job_id,
-        "search_id": sid or None,
+        "run_id": sid or None,
         "started_at": _utc_iso(),
     }
 
     if not sid:
-        # Without search_id we cannot write funnel tables; still exit cleanly with summary.
-        print(_SUMMARY_MARKER)
-        print(json.dumps({**counters, "warn": "missing SEARCH_ID"}, ensure_ascii=False, indent=2))
-        return
+        # Still allow running lanes; they'll just skip DB logging where search_id is required.
+        counters["warn"] = "missing run id (SEARCH_ID/JOB_ID)"
 
-    # For now: run board feeds and ashby as-is, but under explicit search_steps.
-    import subprocess
-    import time
     from pathlib import Path
-
     base = Path(__file__).resolve().parent
     steps = [
         ("search", "tier4_board_feeds", base / "board_feeds_tier4.py"),
@@ -90,7 +68,6 @@ def main() -> None:
     ]
 
     for step, substep, script in steps:
-        step_row_id = _step_start(sb, search_id=sid, step=step, substep=substep)
         t0 = time.time()
         proc = subprocess.run(
             [sys.executable, str(script)],
@@ -109,13 +86,7 @@ def main() -> None:
         child_out = (proc.stdout or "") + "\n" + (proc.stderr or "")
         ok = proc.returncode == 0
         step_counters = {"exit_code": proc.returncode, "elapsed_ms": elapsed_ms, "stdout_chars": len(child_out)}
-        _step_finish(
-            sb,
-            step_id=step_row_id,
-            status="done" if ok else "failed",
-            counters=step_counters,
-            error=None if ok else child_out[-8000:],
-        )
+        counters.setdefault("steps", []).append({**step_counters, "substep": substep})
         if not ok:
             raise SystemExit(proc.returncode)
 

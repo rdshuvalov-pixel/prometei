@@ -25,7 +25,6 @@ function formatTs(value: unknown): string {
 
 export default async function JobsPage() {
   let jobs: JobRow[] = [];
-  let funnelRows: JobRow[] = [];
   let loadError: string | null = null;
   try {
     const sb = getSupabaseAdmin();
@@ -43,9 +42,6 @@ export default async function JobsPage() {
     const { data, error } = res;
     if (error) throw error;
     jobs = (data ?? []) as JobRow[];
-
-    const funnel = await sb.from("v_search_funnel").select("*").limit(2);
-    if (!funnel.error) funnelRows = (funnel.data ?? []) as JobRow[];
   } catch (e) {
     loadError = toErrorMessage(e);
   }
@@ -55,51 +51,6 @@ export default async function JobsPage() {
       <h1 className="mb-2 text-2xl font-black tracking-tight text-neutral-900 dark:text-amber-50">
         Run history
       </h1>
-
-      {funnelRows.length ? (
-        <section className="mb-10 rounded-2xl border-4 border-neutral-900 bg-white/90 p-4 text-sm font-medium text-neutral-800 shadow-[4px_4px_0_0_#171717] dark:bg-neutral-900/80 dark:text-amber-100/85 dark:shadow-[4px_4px_0_0_#fbbf24]">
-          <p className="font-black text-neutral-900 dark:text-amber-50">Search funnel (latest)</p>
-          <p className="mt-1 text-xs opacity-90">
-            One run = target pool → attempted → candidates → inserted/skipped decisions.
-          </p>
-          <ul className="mt-3 space-y-2">
-            {funnelRows.map((r, idx) => {
-              const id = String(r.search_id ?? `search-${idx}`);
-              const status = String(r.status ?? "—");
-              const created = formatTs(r.created_at);
-              const pool = String(r.targets_pool_total ?? "0");
-              const attempted = String(r.targets_attempted_total ?? "0");
-              const ok = String(r.targets_fetched_ok ?? "0");
-              const searchedOk = String(r.searched_ok ?? "0");
-              const searchedNone = String(r.searched_no_results ?? "0");
-              const notSearchable = String(r.skipped_not_searchable ?? "0");
-              const cand = String(r.candidates_total ?? "0");
-              const ins = String(r.inserted ?? "0");
-              const skip = String(r.skipped ?? "0");
-              return (
-                <li key={id} className="rounded-xl border-2 border-neutral-900 bg-yellow-50/70 p-3 dark:bg-yellow-500/10">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-mono text-xs">{id}</p>
-                      <p className="text-xs opacity-80">{created}</p>
-                    </div>
-                    <p className="text-xs font-black">{status}</p>
-                  </div>
-                  <p className="mt-2 text-xs">
-                    pool: <strong>{pool}</strong> · attempted: <strong>{attempted}</strong> (ok {ok}) · candidates:{" "}
-                    <strong>{cand}</strong> · inserted:{" "}
-                    <strong>{ins}</strong> · skipped: <strong>{skip}</strong>
-                  </p>
-                  <p className="mt-1 text-xs opacity-85">
-                    searched_ok: <strong>{searchedOk}</strong> · searched_no_results: <strong>{searchedNone}</strong> ·
-                    not_searchable: <strong>{notSearchable}</strong>
-                  </p>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : null}
 
       {loadError ? (
         <div className="rounded-2xl border-4 border-amber-600 bg-amber-100 p-4 text-sm font-bold text-amber-950 dark:border-amber-400 dark:bg-amber-950/50 dark:text-amber-100">

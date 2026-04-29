@@ -456,7 +456,7 @@ def main() -> None:
                     "tier": "4_ashby",
                     "status": "New",
                     "score": 0,
-                    "match_status": "pending_score",
+                    "pipeline_status": "pending_enrich",
                     "details": json.dumps(details, ensure_ascii=False),
                     "url": job_url,
                 }
