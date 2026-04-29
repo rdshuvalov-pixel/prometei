@@ -38,6 +38,8 @@ def _pick_queued(sb: Client) -> dict | None:
         .select("*")
         .eq("status", "queued")
         .order("created_at", desc=False)
+        # created_at is not guaranteed unique; use id as a stable tie-breaker for FIFO-ish behavior
+        .order("id", desc=False)
         .limit(1)
         .execute()
     )
