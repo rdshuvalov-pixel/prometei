@@ -93,7 +93,12 @@ def _prompt(row: dict) -> str:
 
 
 def _call_openai(*, key: str, base: str, model: str, prompt: str, timeout_sec: float = 60.0) -> dict:
-    url = f"{base}/chat/completions"
+    # OpenRouter SDK uses base https://openrouter.ai/api and appends /v1 internally.
+    # To support both styles, normalize /api -> /api/v1 for OpenAI-compatible endpoints.
+    norm_base = base.rstrip("/")
+    if norm_base.endswith("/api"):
+        norm_base = f"{norm_base}/v1"
+    url = f"{norm_base}/chat/completions"
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     body = {
         "model": model,
