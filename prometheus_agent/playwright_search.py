@@ -199,6 +199,16 @@ def main() -> None:
         "started_at": _utc_iso(),
     }
 
+    # Time budget: keep the whole search within ~30 minutes.
+    budget_sec = int(os.environ.get("SEARCH_TIME_BUDGET_SEC", "1740"))  # 29 minutes by default
+    deadline = time.time() + max(60, budget_sec)
+    force_all = (os.environ.get("PLAYWRIGHT_FORCE_ALL") or "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context()
@@ -206,10 +216,12 @@ def main() -> None:
         page.set_default_timeout(int(os.environ.get("PLAYWRIGHT_TIMEOUT_MS", "30000")))
 
         for t in batch:
+            if time.time() > deadline:
+                break
             d = detect_platform(t.url)
             platform = _host(t.url) or d.canonical
 
-            if d.lane != PlatformLane.playwright:
+            if (d.lane != PlatformLane.playwright) and (not force_all):
                 counters["skipped_not_searchable"] += 1
                 _log_target(
                     sb,
