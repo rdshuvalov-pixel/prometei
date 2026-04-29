@@ -14,6 +14,11 @@
 #   {"job_type":"tier4_board_feeds"} — GH/Lever/Workable + по умолчанию Remotive+RemoteOK (см. .env.worker)
 #   {"job_type":"vacancy_enrich"}    — обогащение полей в vacancies (pending_enrich → pending_score)
 #   {"job_type":"vacancy_score"}     — rule-based скоринг (pending_score → scored + status=Scored)
+#   {"job_type":"vacancy_llm"}       — LLM-материалы (fit_reasoning + notes + cover letters)
+#   {"job_type":"keyword_search"}    — поиск по ключевому слову по источникам (board_feeds/ashby/playwright)
+#
+# Для последовательного пайплайна (рекомендуется для одного воркера):
+#   scripts/enqueue-pipeline.example.sh
 
 set -eu
 
