@@ -25,26 +25,38 @@ PIPELINE_SLEEP_SEC="${PIPELINE_SLEEP_SEC:-12}"
 
 post_job() {
   job_type="$1"
+  parent_search_id="${2:-}"
+  payload="{\"job_type\":\"${job_type}\""
+  if [ -n "${parent_search_id}" ]; then
+    payload="${payload},\"parent_search_id\":\"${parent_search_id}\""
+  fi
+  payload="${payload}}"
   if [ -n "${VERCEL_PROTECTION_BYPASS:-}" ]; then
     curl -sS -X POST "${VERCEL_URL}/api/jobs" \
       -H "x-vercel-protection-bypass: ${VERCEL_PROTECTION_BYPASS}" \
       -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
       -H "Content-Type: application/json" \
-      -d "{\"job_type\":\"${job_type}\"}"
+      -d "${payload}"
   else
     curl -sS -X POST "${VERCEL_URL}/api/jobs" \
       -H "Authorization: Bearer ${ENQUEUE_SECRET}" \
       -H "Content-Type: application/json" \
-      -d "{\"job_type\":\"${job_type}\"}"
+      -d "${payload}"
   fi
-  echo ""
 }
 
-post_job "keyword_search"
+ROOT_JSON="$(post_job "keyword_search")"
+ROOT_ID="$(printf "%s" "${ROOT_JSON}" | python3 -c 'import json,sys; print((json.load(sys.stdin) or {}).get("job",{}).get("id",""))' 2>/dev/null || true)"
+if [ -z "${ROOT_ID}" ]; then
+  echo "ERROR: не удалось распарсить job id из ответа /api/jobs"
+  echo "${ROOT_JSON}"
+  exit 1
+fi
+echo "${ROOT_JSON}"
 sleep "${PIPELINE_SLEEP_SEC}"
-post_job "vacancy_enrich"
+post_job "vacancy_enrich" "${ROOT_ID}"; echo ""
 sleep "${PIPELINE_SLEEP_SEC}"
-post_job "vacancy_score"
+post_job "vacancy_score" "${ROOT_ID}"; echo ""
 sleep "${PIPELINE_SLEEP_SEC}"
-post_job "vacancy_llm"
+post_job "vacancy_llm" "${ROOT_ID}"; echo ""
 

@@ -81,6 +81,22 @@ def _vacancy_source_exists(sb: Client, platform: str, url: str) -> bool:
         return False
 
 
+def _candidate_url_exists(sb: Client, platform: str, url: str) -> bool:
+    try:
+        res = (
+            sb.table("vacancy_candidates")
+            .select("id")
+            .eq("platform", platform[:255])
+            .eq("external_url", url[:2000])
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        return len(rows) > 0
+    except Exception:
+        return False
+
+
 def _log_target(
     sb: Client,
     *,
@@ -143,6 +159,7 @@ def _log_candidate_and_decision(
                 "published_at": None,
                 "fingerprint": _fingerprint(company or "", role_title or "", external_url),
                 "raw": raw or {},
+                "pipeline_status": "pending_enrich",
             },
         ).execute()
         data = getattr(ins, "data", None)
@@ -235,7 +252,7 @@ def _load_dedup_pairs(sb: Client, limit_rows: int = 15000) -> set[tuple[str, str
     for offset in range(0, limit_rows, step):
         try:
             res = (
-                sb.table("vacancies")
+                sb.table("vacancy_candidates")
                 .select("company, role_title")
                 .range(offset, offset + step - 1)
                 .execute()
@@ -326,36 +343,34 @@ def _try_insert(
     platform: str,
     tier: str,
     details: dict,
+    search_id: str | None,
 ) -> str:
     key = (_norm_key(company), _norm_key(role_title))
     if key in dedup:
         return "dup"
     if _vacancy_source_exists(sb, platform, job_url):
         return "dup_url"
-    row = {
-        "created_at": _today_str(),
-        "company": company[:500],
-        "role_title": role_title[:500],
-        "platform": platform[:255],
-        "tier": tier[:64],
-        "status": "New",
-        "score": 0,
-        "pipeline_status": "pending_enrich",
-        "details": json.dumps(details, ensure_ascii=False),
-        "url": job_url[:2000],
-    }
+    if _candidate_url_exists(sb, platform, job_url):
+        return "dup_url"
     try:
-        ins = sb.table("vacancies").insert(row).execute()
+        ins = sb.table("vacancy_candidates").insert(
+            {
+                "search_id": (search_id or None),
+                "source": "tier4_board_feeds",
+                "tier": tier[:64],
+                "platform": platform[:255],
+                "external_url": job_url[:2000],
+                "company": company[:500],
+                "role_title": role_title[:500],
+                "published_at": None,
+                "fingerprint": _fingerprint(company, role_title, job_url),
+                "raw": {"details": details},
+                "pipeline_status": "pending_enrich",
+            },
+        ).execute()
         ins_rows = getattr(ins, "data", None) or []
         if not ins_rows:
             return "err"
-        vid = ins_rows[0]["id"]
-        try:
-            sb.table("vacancy_sources").insert(
-                {"vacancy_id": vid, "platform": platform[:255], "url": job_url[:2000]},
-            ).execute()
-        except Exception:
-            pass
         dedup.add(key)
         return "ok"
     except Exception as e:  # noqa: BLE001
@@ -493,6 +508,7 @@ def main() -> None:
                     platform="greenhouse.io",
                     tier="4_greenhouse",
                     details=details,
+                    search_id=(sid or None),
                 )
                 if st == "ok":
                     inserted += 1
@@ -619,6 +635,7 @@ def main() -> None:
                     platform="jobs.lever.co",
                     tier="4_lever",
                     details=details,
+                    search_id=(sid or None),
                 )
                 if st == "ok":
                     inserted += 1
@@ -722,6 +739,7 @@ def main() -> None:
                     platform="apply.workable.com",
                     tier="4_workable",
                     details=details,
+                    search_id=(sid or None),
                 )
                 if st == "ok":
                     inserted += 1
@@ -790,6 +808,7 @@ def main() -> None:
                     platform="remotive.com",
                     tier="4_remotive",
                     details=details,
+                    search_id=(sid or None),
                 )
                 if st == "ok":
                     inserted += 1
@@ -858,6 +877,7 @@ def main() -> None:
                         platform="remoteok.com",
                         tier="4_remoteok",
                         details=details,
+                        search_id=(sid or None),
                     )
                     if st == "ok":
                         inserted += 1

@@ -22,6 +22,28 @@ from supabase import Client, create_client
 _SUMMARY_MARKER = "--- сводка ---"
 
 
+# region agent log
+def _agent_log(*, run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    try:
+        p = "/Users/luqy/Documents/Cursor/Агент Прометей/.cursor/debug-184508.log"
+        payload = {
+            "sessionId": "184508",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        return
+
+
+# endregion agent log
+
+
 def _client() -> Client:
     url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -88,6 +110,13 @@ def main() -> None:
     sb = _client()
     _set_job_counters(sb, job_id, counters)
     _append_job_log(sb, job_id, f"[{_utc_iso()}] keyword_search start run_id={sid or '—'} keyword={keyword!r}\n")
+    _agent_log(
+        run_id=(job_id or "unknown"),
+        hypothesis_id="H5",
+        location="prometheus_agent/keyword_search.py:main",
+        message="keyword_search start",
+        data={"job_id": job_id or None, "SEARCH_ID": sid or None, "keyword": keyword, "timeout_sec": timeout_sec or None},
+    )
 
     if not sid:
         # Still allow running lanes; they'll just skip DB logging where search_id is required.
@@ -106,6 +135,13 @@ def main() -> None:
         counters["current_substep"] = substep
         counters["current_substep_started_at"] = _utc_iso()
         _set_job_counters(sb, job_id, counters)
+        _agent_log(
+            run_id=(job_id or "unknown"),
+            hypothesis_id="H5",
+            location="prometheus_agent/keyword_search.py:main",
+            message="spawn substep",
+            data={"substep": substep, "script": str(script), "SEARCH_ID": sid or None},
+        )
         t0 = time.time()
         try:
             proc = subprocess.run(

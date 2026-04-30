@@ -851,8 +851,11 @@ def main() -> None:
     job_type = os.environ.get("JOB_TYPE") or "script_crawl"
     job_id = os.environ.get("WORKER_JOB_ID") or os.environ.get("JOB_ID") or ""
     base = _base_dir()
+    sid = _search_id()
 
-    print(f"[{datetime.now(timezone.utc).isoformat()}] script_crawl start job_type={job_type!r} job_id={job_id!r}")
+    print(
+        f"[{datetime.now(timezone.utc).isoformat()}] script_crawl start job_type={job_type!r} job_id={job_id!r} search_id={sid!r}",
+    )
 
     if job_type == "watchlist":
         path = base / "watchlist_targets.md"
@@ -874,6 +877,9 @@ def main() -> None:
     before_s = _count_head(sb, "vacancy_ingest_decisions")
 
     counters: dict = {
+        "agent_build_tag": "2026-04-30.candidates_pipeline",
+        "search_id_resolved": (sid or None),
+        "count_table_used": "vacancy_candidates",
         "before_vacancies": before_v,
         "before_sources": before_s,
         "skipped_blocked_urls": skipped_blocked[:200],
