@@ -40,6 +40,22 @@ def _client() -> Client:
         raise SystemExit(2)
     return create_client(url, key)
 
+def _job_id() -> str:
+    return (os.environ.get("WORKER_JOB_ID") or os.environ.get("JOB_ID") or "").strip()
+
+
+def _append_job_log(sb: Client, job_id: str, text: str) -> None:
+    if not job_id:
+        return
+    try:
+        res = sb.table("job_runs").select("log").eq("id", job_id).limit(1).execute()
+        rows = getattr(res, "data", None) or []
+        prev = (rows[0].get("log") if rows else "") or ""
+        blob = (prev + text)[-120_000:]
+        sb.table("job_runs").update({"log": blob}).eq("id", job_id).execute()
+    except Exception:
+        return
+
 
 def _batch_size() -> int:
     raw = (os.environ.get("VACANCY_LLM_SCORE_BATCH") or "120").strip()
@@ -151,6 +167,7 @@ def main() -> None:
     sb = _client()
     n = _batch_size()
     sid = (os.environ.get("SEARCH_ID") or "").strip()
+    job_id = _job_id()
 
     q = (
         sb.table("vacancy_candidates")
@@ -168,6 +185,11 @@ def main() -> None:
     res = q.limit(n).execute()
     rows = getattr(res, "data", None) or []
     total_pending = int(getattr(res, "count", None) or 0)
+    _append_job_log(
+        sb,
+        job_id,
+        f"[{_utc_iso()}] vacancy_llm_score start search_id={sid or '—'} rows_loaded={len(rows)} pending_score_total={total_pending}\n",
+    )
 
     scored = 0
     skipped = 0
@@ -179,6 +201,11 @@ def main() -> None:
         if vid is None:
             skipped += 1
             continue
+        _append_job_log(
+            sb,
+            job_id,
+            f"[{_utc_iso()}] candidate_start id={vid} url={(str(r.get('external_url') or '')[:160])}\n",
+        )
         try:
             out = call_openai_json(
                 key=key,
@@ -220,6 +247,7 @@ def main() -> None:
             }
             sb.table("vacancy_candidates").update(patch).eq("id", vid).eq("pipeline_status", "pending_score").execute()
             scored += 1
+            _append_job_log(sb, job_id, f"[{_utc_iso()}] candidate_done id={vid} score={score}\n")
         except Exception as e:  # noqa: BLE001
             errors += 1
             last_error = str(e)
@@ -227,6 +255,7 @@ def main() -> None:
                 "pipeline_status",
                 "pending_score",
             ).execute()
+            _append_job_log(sb, job_id, f"[{_utc_iso()}] candidate_error id={vid} err={str(e)[:240]}\n")
 
     summary = {
         "job_type": "vacancy_llm_score",
@@ -243,6 +272,11 @@ def main() -> None:
     }
     print(_SUMMARY_MARKER, flush=True)
     print(json.dumps(summary, ensure_ascii=False, indent=2), flush=True)
+    _append_job_log(
+        sb,
+        job_id,
+        f"[{_utc_iso()}] vacancy_llm_score done scored={scored} skipped={skipped} errors={errors}\n",
+    )
 
 
 if __name__ == "__main__":

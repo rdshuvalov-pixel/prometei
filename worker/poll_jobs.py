@@ -103,6 +103,23 @@ def _gate_or_raise(sb: Client, row: dict) -> None:
 
 
 def _enqueue_next(sb: Client, *, parent_search_id: str, next_job_type: str) -> None:
+    # Idempotency: avoid creating duplicate step jobs for the same run.
+    try:
+        existing = (
+            sb.table("job_runs")
+            .select("id, status")
+            .eq("job_type", next_job_type)
+            .eq("payload->>parent_search_id", parent_search_id)
+            .in_("status", ["queued", "running", "done"])
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(existing, "data", None) or []
+        if rows:
+            return
+    except Exception:
+        # If the check fails, fall back to insert to keep pipeline moving.
+        pass
     sb.table("job_runs").insert(
         {
             "status": "queued",
@@ -221,20 +238,19 @@ def _finish_ok(sb: Client, job_id: str, counters: dict, log_extra: str) -> None:
 
 
 def _finish_fail(sb: Client, job_id: str, err: str) -> None:
+    # Best-effort finalize. If the update fails mid-way (network/container restart),
+    # we retry once to avoid leaving rows in a confusing "failed without finished_at/error" state.
+    msg = (err or "").strip() or "unknown failure"
+    patch = {"status": "failed", "finished_at": _utc_iso(), "error": msg[:8000]}
     try:
-        prev = _read_row(sb, job_id)
-        counters = prev.get("counters")
-        if isinstance(counters, dict):
-            sb.table("job_runs").update({"counters": counters}).eq("id", job_id).execute()
+        sb.table("job_runs").update(patch).eq("id", job_id).execute()
+        return
     except Exception:
         pass
-    sb.table("job_runs").update(
-        {
-            "status": "failed",
-            "finished_at": _utc_iso(),
-            "error": err[:8000],
-        },
-    ).eq("id", job_id).execute()
+    try:
+        sb.table("job_runs").update(patch).eq("id", job_id).execute()
+    except Exception:
+        return
 
 
 def _read_row(sb: Client, job_id: str) -> dict:
