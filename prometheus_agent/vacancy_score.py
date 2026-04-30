@@ -5,6 +5,8 @@ vacancy_score:
   - computes deterministic 0..100 score + score_breakdown (jsonb)
   - sets pipeline_status = scored, scored_at
   - promotes pipeline_status only; promotion into vacancies is a separate step
+
+LEGACY: replaced by vacancy_llm_score (LLM-based scoring).
 """
 
 from __future__ import annotations

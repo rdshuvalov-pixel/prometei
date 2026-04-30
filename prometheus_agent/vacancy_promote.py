@@ -46,7 +46,10 @@ def _min_score() -> int:
         n = int(raw)
     except ValueError:
         n = 50
-    return max(1, min(n, 100))
+    # Allow explicit 0 for debugging/backfills; keep default floor=1 otherwise.
+    if n <= 0:
+        return 0
+    return min(n, 100)
 
 
 def _require_llm() -> bool:

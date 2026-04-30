@@ -109,8 +109,8 @@ nano .env.worker
   - **`python3 /app/prometheus_agent/worker_dispatch.py`** — по **`JOB_TYPE`** из задачи запускает нужный шаг пайплайна:
     - `keyword_search` / `full_search` — поиск (пишет кандидатов в `vacancy_candidates`)
     - `tier4_ashby` / `board_feeds` / `watchlist` / `script_crawl` — сбор (пишет **только** в `vacancy_candidates`)
-    - `vacancy_enrich` — enrich (**только** `vacancy_candidates`)
-    - `vacancy_score` — скоринг (**только** `vacancy_candidates`)
+    - `vacancy_llm_extract` — LLM-разбор параметров (**только** `vacancy_candidates`)
+    - `vacancy_llm_score` — LLM-оценка (**только** `vacancy_candidates`)
     - `vacancy_llm` — LLM (**только** `vacancy_candidates`)
     - `vacancy_promote` — перенос прошедших условий из `vacancy_candidates` → `vacancies` + `vacancy_sources`
     - Важно: **`vacancies` теперь заполняется только шагом `vacancy_promote`**.
@@ -120,9 +120,9 @@ nano .env.worker
 Для одного прогона (run id = `job_runs.id` у `keyword_search`) порядок всегда такой:
 
 - `keyword_search` (**корень прогона**, пишет в `vacancy_candidates.search_id=<run_id>`)
-- `vacancy_enrich` (работает только по `vacancy_candidates.pipeline_status=pending_enrich`)
-- `vacancy_score` (работает только по `vacancy_candidates.pipeline_status=pending_score`)
-- `vacancy_llm` (работает только по `vacancy_candidates.pipeline_status=scored`, ставит `llm_done`)
+- `vacancy_llm_extract` (работает только по `vacancy_candidates.pipeline_status=pending_enrich`, ставит `pending_score`)
+- `vacancy_llm_score` (работает только по `vacancy_candidates.pipeline_status=pending_score`, ставит `scored`)
+- `vacancy_llm` (работает только по `vacancy_candidates.pipeline_status=scored`, ставит `llm_done`; по умолчанию письма при `score>=50`)
 - `vacancy_promote` (берёт только `vacancy_candidates.pipeline_status=llm_done` и переносит в `vacancies`)
 
 Правило: **до `llm_done` никакие записи не должны попадать в `vacancies`**.

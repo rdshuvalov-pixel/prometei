@@ -44,11 +44,11 @@ def _batch_size() -> int:
 
 
 def _min_score() -> int:
-    raw = (os.environ.get("LLM_MIN_SCORE") or "70").strip()
+    raw = (os.environ.get("LLM_MIN_SCORE") or "50").strip()
     try:
         n = int(raw)
     except ValueError:
-        n = 70
+        n = 50
     return max(1, min(n, 100))
 
 

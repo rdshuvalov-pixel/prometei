@@ -21,38 +21,6 @@ from supabase import Client, create_client
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-# region agent log
-def _agent_log(*, run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
-    try:
-        p = "/Users/luqy/Documents/Cursor/Агент Прометей/.cursor/debug-184508.log"
-        payload = {
-            "sessionId": "184508",
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000),
-        }
-        with open(p, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        return
-
-
-def _dbg_run_id(row: dict) -> str:
-    return str(row.get("id") or "unknown")
-
-
-def _dbg_parent(row: dict) -> str | None:
-    return _parent_search_id(row)
-
-
-# endregion agent log
-
-
-_WORKER_BUILD_TAG = "2026-04-30.worker_chainfix_v2"
-
 def _jt(raw: object) -> str:
     return str(raw or "").strip().lower()
 
@@ -72,10 +40,10 @@ def _parent_search_id(row: dict) -> str | None:
 def _required_prev(job_type: str) -> list[str] | None:
     jt = _jt(job_type)
     return {
-        # vacancy_enrich can start from either search root (keyword/full) or a manual script_crawl run.
-        "vacancy_enrich": ["keyword_search", "full_search", "script_crawl"],
-        "vacancy_score": ["vacancy_enrich"],
-        "vacancy_llm": ["vacancy_score"],
+        # vacancy_llm_extract can start from either search root (keyword/full) or a manual script_crawl run.
+        "vacancy_llm_extract": ["keyword_search", "full_search", "script_crawl"],
+        "vacancy_llm_score": ["vacancy_llm_extract"],
+        "vacancy_llm": ["vacancy_llm_score"],
         "vacancy_promote": ["vacancy_llm"],
     }.get(jt)
 
@@ -120,53 +88,18 @@ def _gate_or_raise(sb: Client, row: dict) -> None:
     jt = _jt(row.get("job_type"))
     pid = _parent_search_id(row)
     if not pid:
-        _agent_log(
-            run_id=_dbg_run_id(row),
-            hypothesis_id="H1",
-            location="worker/poll_jobs.py:_gate_or_raise",
-            message="gate skipped (no parent_search_id)",
-            data={"job_type": jt},
-        )
         return
     prev = _required_prev(jt)
     if not prev:
-        _agent_log(
-            run_id=_dbg_run_id(row),
-            hypothesis_id="H1",
-            location="worker/poll_jobs.py:_gate_or_raise",
-            message="gate skipped (no required prev)",
-            data={"job_type": jt, "parent_search_id": pid},
-        )
         return
-    # First-level gate: root must be done. This prevents "enrich for a run that never finished producing candidates".
-    if jt == "vacancy_enrich" and not _root_done(sb, pid):
-        _agent_log(
-            run_id=_dbg_run_id(row),
-            hypothesis_id="H1",
-            location="worker/poll_jobs.py:_gate_or_raise",
-            message="gate failed (root not done)",
-            data={"job_type": jt, "parent_search_id": pid},
-        )
+    # First-level gate: root must be done. This prevents "extract for a run that never finished producing candidates".
+    if jt == "vacancy_llm_extract" and not _root_done(sb, pid):
         raise RuntimeError(f"gate: require root(id={pid})=done before {jt}")
 
     ok = any(_has_done(sb, job_type=p, parent_search_id=pid) for p in prev)
     if not ok:
         need = " or ".join(prev)
-        _agent_log(
-            run_id=_dbg_run_id(row),
-            hypothesis_id="H1",
-            location="worker/poll_jobs.py:_gate_or_raise",
-            message="gate failed",
-            data={"job_type": jt, "parent_search_id": pid, "need_done": prev},
-        )
         raise RuntimeError(f"gate: require ({need})=done for parent_search_id={pid} before {jt}")
-    _agent_log(
-        run_id=_dbg_run_id(row),
-        hypothesis_id="H1",
-        location="worker/poll_jobs.py:_gate_or_raise",
-        message="gate ok",
-        data={"job_type": jt, "parent_search_id": pid, "prev": prev},
-    )
 
 
 def _enqueue_next(sb: Client, *, parent_search_id: str, next_job_type: str) -> None:
@@ -205,8 +138,8 @@ def _pick_queued(sb: Client) -> dict | None:
     priority: dict[str, int] = {
         "keyword_search": 5,
         "full_search": 5,
-        "vacancy_enrich": 10,
-        "vacancy_score": 20,
+        "vacancy_llm_extract": 10,
+        "vacancy_llm_score": 20,
         "vacancy_llm": 30,
         "vacancy_promote": 40,
         "tier4_board_feeds": 60,
@@ -258,8 +191,6 @@ def _claim(sb: Client, job_id: str) -> bool:
 def _finish_ok(sb: Client, job_id: str, counters: dict, log_extra: str) -> None:
     prev = _read_row(sb, job_id)
     log = (prev.get("log") or "") + log_extra
-    if isinstance(counters, dict):
-        counters.setdefault("worker_build_tag", _WORKER_BUILD_TAG)
     sb.table("job_runs").update(
         {
             "status": "done",
@@ -275,15 +206,15 @@ def _finish_ok(sb: Client, job_id: str, counters: dict, log_extra: str) -> None:
     payload = _payload(prev)
     parent = _parent_search_id(prev) or pid
     if jt in ("keyword_search", "full_search"):
-        _enqueue_next(sb, parent_search_id=pid, next_job_type="vacancy_enrich")
+        _enqueue_next(sb, parent_search_id=pid, next_job_type="vacancy_llm_extract")
         return
     if jt == "script_crawl":
-        _enqueue_next(sb, parent_search_id=pid, next_job_type="vacancy_enrich")
+        _enqueue_next(sb, parent_search_id=pid, next_job_type="vacancy_llm_extract")
         return
     if payload.get("parent_search_id"):
-        if jt == "vacancy_enrich":
-            _enqueue_next(sb, parent_search_id=parent, next_job_type="vacancy_score")
-        elif jt == "vacancy_score":
+        if jt == "vacancy_llm_extract":
+            _enqueue_next(sb, parent_search_id=parent, next_job_type="vacancy_llm_score")
+        elif jt == "vacancy_llm_score":
             _enqueue_next(sb, parent_search_id=parent, next_job_type="vacancy_llm")
         elif jt == "vacancy_llm":
             _enqueue_next(sb, parent_search_id=parent, next_job_type="vacancy_promote")
@@ -294,7 +225,6 @@ def _finish_fail(sb: Client, job_id: str, err: str) -> None:
         prev = _read_row(sb, job_id)
         counters = prev.get("counters")
         if isinstance(counters, dict):
-            counters.setdefault("worker_build_tag", _WORKER_BUILD_TAG)
             sb.table("job_runs").update({"counters": counters}).eq("id", job_id).execute()
     except Exception:
         pass
@@ -361,18 +291,6 @@ def run_once(sb: Client) -> None:
         return
     job_id = str(job["id"])
     job_type = _jt(job.get("job_type") or "script_crawl")
-    _agent_log(
-        run_id=job_id,
-        hypothesis_id="H2",
-        location="worker/poll_jobs.py:run_once",
-        message="picked queued job",
-        data={
-            "job_type": job_type,
-            "created_at": job.get("created_at"),
-            "payload_parent_search_id": _dbg_parent(job),
-            "payload_keys": sorted(list(_payload(job).keys())),
-        },
-    )
 
     if not _claim(sb, job_id):
         return
@@ -402,19 +320,6 @@ def run_once(sb: Client) -> None:
         "JOB_TYPE": job_type,
         "SEARCH_ID": _parent_search_id(job) or job_id,
     }
-    _agent_log(
-        run_id=job_id,
-        hypothesis_id="H3",
-        location="worker/poll_jobs.py:run_once",
-        message="spawn worker cmd",
-        data={
-            "cmd": cmd,
-            "timeout": timeout,
-            "JOB_TYPE": job_type,
-            "SEARCH_ID": child_env.get("SEARCH_ID"),
-            "parent_search_id": _dbg_parent(job),
-        },
-    )
 
     try:
         proc = subprocess.run(

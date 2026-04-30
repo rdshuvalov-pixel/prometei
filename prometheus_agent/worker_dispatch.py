@@ -8,6 +8,8 @@
 - tier4_board_feeds, tier4_greenhouse_lever, board_feeds → board_feeds_tier4.py
 - vacancy_enrich → vacancy_enrich.py
 - vacancy_score, score_vacancies, evaluate, scoring → vacancy_score.py
+- vacancy_llm_extract → vacancy_llm_extract.py
+- vacancy_llm_score → vacancy_llm_score.py
 - vacancy_llm → vacancy_llm.py (опционально)
 - vacancy_promote, promote → vacancy_promote.py
 """
@@ -34,6 +36,10 @@ def main() -> int:
         script = base / "board_feeds_tier4.py"
     elif job_type in ("vacancy_enrich", "enrich_vacancies", "enrich"):
         script = base / "vacancy_enrich.py"
+    elif job_type in ("vacancy_llm_extract", "llm_extract"):
+        script = base / "vacancy_llm_extract.py"
+    elif job_type in ("vacancy_llm_score", "llm_score"):
+        script = base / "vacancy_llm_score.py"
     elif job_type in ("vacancy_llm", "llm_vacancies", "llm"):
         script = base / "vacancy_llm.py"
     elif job_type in ("vacancy_promote", "promote", "candidates_to_vacancies"):

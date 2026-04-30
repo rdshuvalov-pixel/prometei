@@ -2,6 +2,7 @@ node_modules/
 apps/web/node_modules/
 .DS_Store
 .env.worker
+.env.local
 apps/web/.env.local
 apps/web/.next/
 prometheus_agent/.env
@@ -11,3 +12,4 @@ prometheus_agent/client_secret_*.json
 prometheus_agent/gmail_token.json
 prometheus_agent/out/*
 !prometheus_agent/out/.gitkeep
+.cursor/

@@ -15,8 +15,8 @@
 
 ## 2) Норма (SLO)
 - `keyword_search`: до ~30 минут (зависит от Playwright)
-- `vacancy_enrich`: секунды–минуты
-- `vacancy_score`: секунды–минуты
+- `vacancy_llm_extract`: минуты (зависит от batch/модели)
+- `vacancy_llm_score`: минуты (зависит от batch/модели)
 - `vacancy_llm`: зависит от `VACANCY_LLM_BATCH` (обычно 1–10 минут)
 
 ## 3) Если задача зависла в running

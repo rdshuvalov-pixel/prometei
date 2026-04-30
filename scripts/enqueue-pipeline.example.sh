@@ -2,7 +2,7 @@
 # enqueue-pipeline.example.sh
 #
 # Назначение: поставить в очередь последовательный пайплайн задач через Vercel API:
-#   keyword_search -> vacancy_enrich -> vacancy_score -> vacancy_llm
+#   keyword_search -> vacancy_llm_extract -> vacancy_llm_score -> vacancy_llm
 #
 # Важно: если воркер один, порядок критичен. Поэтому ставим задачи с паузами между POST,
 # чтобы created_at отличались и очередь была FIFO.
@@ -54,9 +54,9 @@ if [ -z "${ROOT_ID}" ]; then
 fi
 echo "${ROOT_JSON}"
 sleep "${PIPELINE_SLEEP_SEC}"
-post_job "vacancy_enrich" "${ROOT_ID}"; echo ""
+post_job "vacancy_llm_extract" "${ROOT_ID}"; echo ""
 sleep "${PIPELINE_SLEEP_SEC}"
-post_job "vacancy_score" "${ROOT_ID}"; echo ""
+post_job "vacancy_llm_score" "${ROOT_ID}"; echo ""
 sleep "${PIPELINE_SLEEP_SEC}"
 post_job "vacancy_llm" "${ROOT_ID}"; echo ""
 
