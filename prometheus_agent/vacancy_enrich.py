@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 vacancy_enrich:
-  - picks vacancies where pipeline_status = pending_enrich
+  - picks vacancy_candidates where pipeline_status = pending_enrich
   - parses role_title/details/url to fill normalized fields
   - sets pipeline_status = pending_score and enriched_at
 
@@ -19,6 +19,30 @@ from datetime import datetime, timezone
 from supabase import Client, create_client
 
 _SUMMARY_MARKER = "--- сводка ---"
+
+
+# region agent log
+def _agent_log(*, run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    try:
+        import time
+
+        p = "/Users/luqy/Documents/Cursor/Агент Прометей/.cursor/debug-184508.log"
+        payload = {
+            "sessionId": "184508",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        return
+
+
+# endregion agent log
 
 
 def _utc_iso() -> str:
@@ -173,18 +197,64 @@ def _extract(row: dict) -> dict:
 def main() -> None:
     sb = _client()
     n = _batch_size()
+    sid = (os.environ.get("SEARCH_ID") or "").strip()
+    _agent_log(
+        run_id=(os.environ.get("WORKER_JOB_ID") or os.environ.get("JOB_ID") or "unknown").strip() or "unknown",
+        hypothesis_id="H4",
+        location="prometheus_agent/vacancy_enrich.py:main",
+        message="vacancy_enrich start",
+        data={"SEARCH_ID": (sid or None), "batch_size": n},
+    )
 
-    # pick batch (oldest first to keep pipeline moving)
-    res = (
-        sb.table("vacancies")
-        .select("id, role_title, company, url, details, pipeline_status", count="exact")
+    # Diagnostics: понять, что именно видит воркер в таблице на старте шага.
+    try:
+        all_pending = (
+            sb.table("vacancy_candidates")
+            .select("id", count="exact", head=True)
+            .eq("pipeline_status", "pending_enrich")
+            .execute()
+        )
+        pending_enrich_total_all = int(getattr(all_pending, "count", None) or 0)
+    except Exception:
+        pending_enrich_total_all = -1
+    pending_enrich_total_sid = None
+    if sid:
+        try:
+            sid_pending = (
+                sb.table("vacancy_candidates")
+                .select("id", count="exact", head=True)
+                .eq("pipeline_status", "pending_enrich")
+                .eq("search_id", sid)
+                .execute()
+            )
+            pending_enrich_total_sid = int(getattr(sid_pending, "count", None) or 0)
+        except Exception:
+            pending_enrich_total_sid = -1
+
+    q = (
+        sb.table("vacancy_candidates")
+        .select("id, role_title, company, external_url, raw, pipeline_status", count="exact")
         .eq("pipeline_status", "pending_enrich")
         .order("created_at", desc=False)
-        .limit(n)
-        .execute()
     )
+    if sid:
+        q = q.eq("search_id", sid)
+    res = q.limit(n).execute()
     rows = getattr(res, "data", None) or []
     total_pending = int(getattr(res, "count", None) or 0)
+    _agent_log(
+        run_id=(os.environ.get("WORKER_JOB_ID") or os.environ.get("JOB_ID") or "unknown").strip() or "unknown",
+        hypothesis_id="H4",
+        location="prometheus_agent/vacancy_enrich.py:main",
+        message="vacancy_enrich loaded pending_enrich rows",
+        data={
+            "SEARCH_ID": (sid or None),
+            "pending_enrich_total_all": pending_enrich_total_all,
+            "pending_enrich_total_sid": pending_enrich_total_sid,
+            "pending_enrich_total": total_pending,
+            "rows_loaded": len(rows),
+        },
+    )
 
     enriched = 0
     skipped = 0
@@ -196,21 +266,30 @@ def main() -> None:
             skipped += 1
             continue
         try:
-            patch = _extract(r)
+            patch = _extract(
+                {
+                    "role_title": r.get("role_title"),
+                    "company": r.get("company"),
+                    "url": r.get("external_url"),
+                    "details": _as_text(r.get("raw")),
+                },
+            )
             patch["enriched_at"] = _utc_iso()
             patch["pipeline_status"] = "pending_score"
-            sb.table("vacancies").update(patch).eq("id", vid).eq("pipeline_status", "pending_enrich").execute()
+            sb.table("vacancy_candidates").update(patch).eq("id", vid).eq("pipeline_status", "pending_enrich").execute()
             enriched += 1
         except Exception as e:  # noqa: BLE001
             errors += 1
             msg = str(e)
-            sb.table("vacancies").update({"pipeline_status": "pending_score", "notes": f"enrich_warn: {msg[:200]}"}).eq(
-                "id",
-                vid,
-            ).eq("pipeline_status", "pending_enrich").execute()
+            sb.table("vacancy_candidates").update(
+                {"pipeline_status": "pending_score", "notes": f"enrich_warn: {msg[:200]}"},
+            ).eq("id", vid).eq("pipeline_status", "pending_enrich").execute()
 
     summary = {
         "job_type": "vacancy_enrich",
+        "search_id": (sid or None),
+        "pending_enrich_total_all": pending_enrich_total_all,
+        "pending_enrich_total_sid": pending_enrich_total_sid,
         "pending_enrich_total": total_pending,
         "batch_size": n,
         "rows_loaded": len(rows),

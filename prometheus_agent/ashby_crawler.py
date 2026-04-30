@@ -141,6 +141,22 @@ def _vacancy_source_exists(sb: Client, platform: str, url: str) -> bool:
         return False
 
 
+def _candidate_url_exists(sb: Client, platform: str, url: str) -> bool:
+    try:
+        res = (
+            sb.table("vacancy_candidates")
+            .select("id")
+            .eq("platform", platform[:255])
+            .eq("external_url", url[:2000])
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        return len(rows) > 0
+    except Exception:
+        return False
+
+
 def _log_target(
     sb: Client,
     *,
@@ -202,6 +218,7 @@ def _log_candidate_and_decision(
                 "published_at": raw.get("published_at"),
                 "fingerprint": _fingerprint(company, role_title, external_url),
                 "raw": raw or {},
+                "pipeline_status": "pending_enrich",
             },
         ).execute()
         data = getattr(ins, "data", None)
@@ -233,7 +250,7 @@ def _load_dedup_pairs(sb: Client, limit_rows: int = 15000) -> set[tuple[str, str
     for offset in range(0, limit_rows, step):
         try:
             res = (
-                sb.table("vacancies")
+                sb.table("vacancy_candidates")
                 .select("company, role_title")
                 .range(offset, offset + step - 1)
                 .execute()
@@ -435,6 +452,20 @@ def main() -> None:
                             reason="dup_platform_url",
                         )
                     continue
+                if _candidate_url_exists(sb, "jobs.ashbyhq.com", job_url):
+                    duplicates += 1
+                    if sid:
+                        _log_candidate_and_decision(
+                            sb,
+                            search_id=sid,
+                            external_url=job_url,
+                            company=company,
+                            role_title=role_title,
+                            raw={"details": {"source": "ashby_posting_api", "slug": slug, "published_at": pub}},
+                            decision="skip_duplicate",
+                            reason="dup_candidate_url",
+                        )
+                    continue
                 ambiguous_geo = not any(m in _job_locations_blob(job) for m in EU_MARKERS)
                 details = {
                     "source": "ashby_posting_api",
@@ -448,35 +479,26 @@ def main() -> None:
                     "ambiguous_geo": ambiguous_geo,
                     "date_unknown": False,
                 }
-                row = {
-                    "created_at": _today_str(),
-                    "company": company[:500],
-                    "role_title": role_title,
-                    "platform": "jobs.ashbyhq.com"[:255],
-                    "tier": "4_ashby",
-                    "status": "New",
-                    "score": 0,
-                    "pipeline_status": "pending_enrich",
-                    "details": json.dumps(details, ensure_ascii=False),
-                    "url": job_url,
-                }
                 try:
-                    ins = sb.table("vacancies").insert(row).execute()
+                    ins = sb.table("vacancy_candidates").insert(
+                        {
+                            "search_id": (sid or None),
+                            "source": "tier4_ashby",
+                            "tier": "4",
+                            "platform": "jobs.ashbyhq.com"[:255],
+                            "external_url": job_url[:2000],
+                            "company": company[:500],
+                            "role_title": role_title[:500],
+                            "published_at": pub,
+                            "fingerprint": _fingerprint(company, role_title, job_url),
+                            "raw": {"details": details},
+                            "pipeline_status": "pending_enrich",
+                        },
+                    ).execute()
                     ins_rows = getattr(ins, "data", None) or []
                     if not ins_rows:
                         errors += 1
                         continue
-                    vid = ins_rows[0]["id"]
-                    try:
-                        sb.table("vacancy_sources").insert(
-                            {
-                                "vacancy_id": vid,
-                                "platform": "jobs.ashbyhq.com"[:255],
-                                "url": job_url,
-                            },
-                        ).execute()
-                    except Exception:
-                        pass
                     dedup.add(key)
                     inserted += 1
                     if sid:
@@ -488,7 +510,7 @@ def main() -> None:
                             role_title=role_title,
                             raw={"details": details},
                             decision="insert",
-                            inserted_vacancy_id=int(vid),
+                            inserted_vacancy_id=None,
                         )
                     if len(matched_preview) < 30:
                         matched_preview.append(f"{title} | {job.get('location')} | {pub}")

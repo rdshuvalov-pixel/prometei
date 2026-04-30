@@ -9,6 +9,7 @@
 - vacancy_enrich → vacancy_enrich.py
 - vacancy_score, score_vacancies, evaluate, scoring → vacancy_score.py
 - vacancy_llm → vacancy_llm.py (опционально)
+- vacancy_promote, promote → vacancy_promote.py
 """
 
 from __future__ import annotations
@@ -35,6 +36,8 @@ def main() -> int:
         script = base / "vacancy_enrich.py"
     elif job_type in ("vacancy_llm", "llm_vacancies", "llm"):
         script = base / "vacancy_llm.py"
+    elif job_type in ("vacancy_promote", "promote", "candidates_to_vacancies"):
+        script = base / "vacancy_promote.py"
     elif job_type in (
         "score_vacancies",
         "vacancy_score",

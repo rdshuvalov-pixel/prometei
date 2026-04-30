@@ -22,6 +22,28 @@ from supabase import Client, create_client
 _SUMMARY_MARKER = "--- сводка ---"
 
 
+# region agent log
+def _agent_log(*, run_id: str, hypothesis_id: str, location: str, message: str, data: dict) -> None:
+    try:
+        p = "/Users/luqy/Documents/Cursor/Агент Прометей/.cursor/debug-184508.log"
+        payload = {
+            "sessionId": "184508",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        return
+
+
+# endregion agent log
+
+
 def _client() -> Client:
     url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -39,6 +61,36 @@ def _search_id() -> str:
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+def _step_timeout_sec() -> int:
+    raw = (os.environ.get("SEARCH_STEP_TIMEOUT_SEC") or "").strip()
+    try:
+        n = int(raw) if raw else 0
+    except ValueError:
+        n = 0
+    return max(0, min(n, 6 * 3600))
+
+
+def _append_job_log(sb: Client, job_id: str, text: str) -> None:
+    if not job_id:
+        return
+    try:
+        res = sb.table("job_runs").select("log").eq("id", job_id).limit(1).execute()
+        rows = getattr(res, "data", None) or []
+        prev = (rows[0].get("log") if rows else "") or ""
+        blob = (prev + text)[-120_000:]
+        sb.table("job_runs").update({"log": blob}).eq("id", job_id).execute()
+    except Exception:
+        return
+
+
+def _set_job_counters(sb: Client, job_id: str, counters: dict) -> None:
+    if not job_id:
+        return
+    try:
+        sb.table("job_runs").update({"counters": counters}).eq("id", job_id).execute()
+    except Exception:
+        return
+
 
 def main() -> None:
     job_id = (os.environ.get("WORKER_JOB_ID") or os.environ.get("JOB_ID") or "").strip()
@@ -54,6 +106,17 @@ def main() -> None:
         "run_id": sid or None,
         "started_at": _utc_iso(),
     }
+    timeout_sec = _step_timeout_sec()
+    sb = _client()
+    _set_job_counters(sb, job_id, counters)
+    _append_job_log(sb, job_id, f"[{_utc_iso()}] keyword_search start run_id={sid or '—'} keyword={keyword!r}\n")
+    _agent_log(
+        run_id=(job_id or "unknown"),
+        hypothesis_id="H5",
+        location="prometheus_agent/keyword_search.py:main",
+        message="keyword_search start",
+        data={"job_id": job_id or None, "SEARCH_ID": sid or None, "keyword": keyword, "timeout_sec": timeout_sec or None},
+    )
 
     if not sid:
         # Still allow running lanes; they'll just skip DB logging where search_id is required.
@@ -68,29 +131,57 @@ def main() -> None:
     ]
 
     for step, substep, script in steps:
-        t0 = time.time()
-        proc = subprocess.run(
-            [sys.executable, str(script)],
-            check=False,
-            capture_output=True,
-            text=True,
-            env={
-                **os.environ,
-                "JOB_TYPE": substep,
-                "WORKER_JOB_ID": job_id,
-                "JOB_ID": job_id,
-                "SEARCH_ID": sid,
-            },
+        _append_job_log(sb, job_id, f"[{_utc_iso()}] step={step} substep={substep} start\n")
+        counters["current_substep"] = substep
+        counters["current_substep_started_at"] = _utc_iso()
+        _set_job_counters(sb, job_id, counters)
+        _agent_log(
+            run_id=(job_id or "unknown"),
+            hypothesis_id="H5",
+            location="prometheus_agent/keyword_search.py:main",
+            message="spawn substep",
+            data={"substep": substep, "script": str(script), "SEARCH_ID": sid or None},
         )
+        t0 = time.time()
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(script)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=(timeout_sec or None),
+                env={
+                    **os.environ,
+                    "JOB_TYPE": substep,
+                    "WORKER_JOB_ID": job_id,
+                    "JOB_ID": job_id,
+                    "SEARCH_ID": sid,
+                },
+            )
+        except subprocess.TimeoutExpired:
+            _append_job_log(sb, job_id, f"[{_utc_iso()}] substep={substep} TIMEOUT after {timeout_sec}s\n")
+            raise SystemExit(124)
         elapsed_ms = int((time.time() - t0) * 1000)
         child_out = (proc.stdout or "") + "\n" + (proc.stderr or "")
         ok = proc.returncode == 0
         step_counters = {"exit_code": proc.returncode, "elapsed_ms": elapsed_ms, "stdout_chars": len(child_out)}
         counters.setdefault("steps", []).append({**step_counters, "substep": substep})
+        counters["current_substep_finished_at"] = _utc_iso()
+        _set_job_counters(sb, job_id, counters)
+        _append_job_log(
+            sb,
+            job_id,
+            f"[{_utc_iso()}] substep={substep} done exit={proc.returncode} elapsed_ms={elapsed_ms} out_tail={child_out[-600:].replace(chr(0), '')}\n",
+        )
         if not ok:
             raise SystemExit(proc.returncode)
 
     counters["finished_at"] = _utc_iso()
+    counters.pop("current_substep", None)
+    counters.pop("current_substep_started_at", None)
+    counters.pop("current_substep_finished_at", None)
+    _set_job_counters(sb, job_id, counters)
+    _append_job_log(sb, job_id, f"[{_utc_iso()}] keyword_search done\n")
     print(_SUMMARY_MARKER)
     print(json.dumps(counters, ensure_ascii=False, indent=2))
 

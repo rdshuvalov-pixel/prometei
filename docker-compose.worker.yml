@@ -5,7 +5,14 @@ services:
       dockerfile: Dockerfile.worker
     env_file:
       - .env.worker
+    command: ["python", "-u", "poll_jobs.py"]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "from poll_jobs import _client; _client(); print('ok')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 25s
     volumes:
       # Отчёты script_crawl / ashby на диске хоста (не только внутри контейнера)
       - ./prometheus_agent/out:/app/prometheus_agent/out

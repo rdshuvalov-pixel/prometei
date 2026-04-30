@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     if (token !== secret) return unauthorized();
   }
 
-  let body: { job_type?: string } = {};
+  let body: { job_type?: string; parent_search_id?: string } = {};
   try {
     body = await request.json();
   } catch {
@@ -52,13 +52,18 @@ export async function POST(request: Request) {
   try {
     const sb = getSupabaseAdmin();
     const jobType = body.job_type ?? "script_crawl";
+    const parentSearchId = String(body.parent_search_id ?? "").trim() || null;
     const { data, error } = await sb
       .from("job_runs")
       .insert({
         status: "queued",
         job_type: jobType,
         counters: {},
-        payload: { job_type: jobType, source: "api" },
+        payload: {
+          job_type: jobType,
+          source: "api",
+          ...(parentSearchId ? { parent_search_id: parentSearchId } : {}),
+        },
       })
       .select("id, status")
       .single();
