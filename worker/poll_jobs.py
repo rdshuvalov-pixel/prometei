@@ -37,13 +37,14 @@ def _parent_search_id(row: dict) -> str | None:
     return s or None
 
 
-def _required_prev(job_type: str) -> str | None:
+def _required_prev(job_type: str) -> list[str] | None:
     jt = _jt(job_type)
     return {
-        "vacancy_enrich": "keyword_search",
-        "vacancy_score": "vacancy_enrich",
-        "vacancy_llm": "vacancy_score",
-        "vacancy_promote": "vacancy_llm",
+        # vacancy_enrich can start from either search root (keyword/full) or a manual script_crawl run.
+        "vacancy_enrich": ["keyword_search", "full_search", "script_crawl"],
+        "vacancy_score": ["vacancy_enrich"],
+        "vacancy_llm": ["vacancy_score"],
+        "vacancy_promote": ["vacancy_llm"],
     }.get(jt)
 
 
@@ -57,7 +58,7 @@ def _has_done(sb: Client, *, job_type: str, parent_search_id: str) -> bool:
     """
     jt = _jt(job_type)
     q = sb.table("job_runs").select("id").eq("job_type", jt).eq("status", "done").limit(1)
-    if jt in ("keyword_search", "full_search"):
+    if jt in ("keyword_search", "full_search", "script_crawl"):
         q = q.eq("id", parent_search_id)
     else:
         q = q.eq("payload->>parent_search_id", parent_search_id)
@@ -74,8 +75,10 @@ def _gate_or_raise(sb: Client, row: dict) -> None:
     prev = _required_prev(jt)
     if not prev:
         return
-    if not _has_done(sb, job_type=prev, parent_search_id=pid):
-        raise RuntimeError(f"gate: require {prev}=done for parent_search_id={pid} before {jt}")
+    ok = any(_has_done(sb, job_type=p, parent_search_id=pid) for p in prev)
+    if not ok:
+        need = " or ".join(prev)
+        raise RuntimeError(f"gate: require ({need})=done for parent_search_id={pid} before {jt}")
 
 
 def _enqueue_next(sb: Client, *, parent_search_id: str, next_job_type: str) -> None:
